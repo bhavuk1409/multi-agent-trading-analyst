@@ -11,7 +11,7 @@ position size.
 
 | | URL |
 | --- | --- |
-| **App** | **https://multi-agent-trading-analyst.vercel.app** |
+| **App** | **https://nexus-multi-agent-trading-analyst.vercel.app** |
 
 ---
 
