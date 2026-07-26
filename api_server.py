@@ -234,7 +234,11 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
 
         except Exception as exc:
             logger.exception(f"Analysis failed for {ticker}")
-            self._json_error(500, str(exc))
+            try:
+                self._json_error(500, str(exc))
+            except Exception:
+                # Response may already be partially written; bail silently.
+                pass
 
 
 # ---------------------------------------------------------------------------

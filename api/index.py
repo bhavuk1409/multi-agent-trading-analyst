@@ -17,6 +17,8 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+logger = logging.getLogger("api.index")
+
 # Add project root and src/ to Python path
 ROOT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT_DIR))
@@ -37,11 +39,17 @@ _agent_system = None
 def get_agent_system():
     global _agent_system
     if _agent_system is None:
-        model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-        _agent_system = AdvancedMultiAgentSystem(
-            model=model,
-            temperature=0.7,
-        )
+        try:
+            model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+            _agent_system = AdvancedMultiAgentSystem(
+                model=model,
+                temperature=0.7,
+            )
+        except Exception as exc:
+            # Surface a clean 500 message to the client instead of letting
+            # the constructor's ValueError escape the handler.
+            logger.exception("Agent system init failed")
+            raise RuntimeError(f"Agent system unavailable: {exc}") from exc
     return _agent_system
 
 
@@ -149,6 +157,11 @@ class handler(http.server.BaseHTTPRequestHandler):
 
                 self._json_ok(results)
             except Exception as e:
-                self._json_error(500, str(e))
+                logger.exception("analyze failed")
+                try:
+                    self._json_error(500, str(e))
+                except Exception:
+                    # Response may already be partially written; bail silently.
+                    pass
         else:
             self._json_error(404, "Not found")
