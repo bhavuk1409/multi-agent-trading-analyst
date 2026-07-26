@@ -12,8 +12,9 @@ than silently returning fabricated numbers.
 
 import os
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -87,6 +88,26 @@ class DataHandler:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _with_timeout(fn, timeout_s: float, *, default):
+        """Run *fn* on a thread with a hard *timeout_s* budget.
+
+        Returns ``default`` on timeout or exception. yfinance's ``.info`` and
+        ``.news`` endpoints occasionally hang on serverless IPs — without
+        this shield a single stuck call can blow the Vercel function
+        timeout and return FUNCTION_INVOCATION_FAILED.
+        """
+        try:
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(fn)
+                return fut.result(timeout=timeout_s)
+        except FuturesTimeoutError:
+            logger.warning(f"Call exceeded {timeout_s}s timeout — returning fallback")
+            return default
+        except Exception as exc:
+            logger.warning(f"Call failed: {exc} — returning fallback")
+            return default
 
     def fetch_and_process(self) -> pd.DataFrame:
         """
@@ -173,10 +194,11 @@ class DataHandler:
         Pull free fundamentals from yfinance's `.info` endpoint.
 
         No API key required. The endpoint is rate-limited but free; on failure
-        the method returns an empty dict rather than raising — fundamentals are
-        advisory and a missing sector / P/E should not abort the analysis.
+        or timeout the method returns an empty dict rather than raising —
+        fundamentals are advisory and a missing sector / P/E should not abort
+        the analysis.
         """
-        try:
+        def _do_fetch() -> Dict[str, Any]:
             logger.info(f"  Fetching fundamentals for {ticker} via yfinance .info …")
             info = yf.Ticker(ticker).info or {}
 
@@ -201,9 +223,10 @@ class DataHandler:
                 "target_high_price": _num("targetHighPrice"),
                 "target_low_price":  _num("targetLowPrice"),
             }
-        except Exception as exc:
-            logger.warning(f"Fundamentals fetch failed for {ticker}: {exc}")
-            return {}
+
+        # `.info` is the slowest yfinance endpoint — cap at 8 s on Vercel so a
+        # hung request doesn't blow the 60 s function budget.
+        return self._with_timeout(_do_fetch, timeout_s=8.0, default={})
 
     def fetch_news(self, ticker: str, days_back: int = 7) -> List[Dict]:
         """
@@ -213,14 +236,27 @@ class DataHandler:
         --------
         1. Exa API (neural search, richer summaries) — if EXA_API_KEY is set.
         2. yfinance built-in news headlines (free, no key).
+
+        Both paths are wrapped in a hard timeout so a stalled provider cannot
+        burn the Vercel function budget.
         """
-        if self.exa:
+        def _yfinance_news() -> List[Dict]:
+            return self._fetch_news_yfinance(ticker, days_back=days_back)
+
+        def _exa_news() -> List[Dict]:
+            if not self.exa:
+                return []
             news = self._fetch_news_exa(ticker, days_back)
             if news:
                 return news
             logger.warning("Exa returned no news — falling back to yfinance news.")
+            return []
 
-        return self._fetch_news_yfinance(ticker, days_back=days_back)
+        if self.exa:
+            articles = self._with_timeout(_exa_news,    timeout_s=6.0, default=[])
+            if articles:
+                return articles
+        return self._with_timeout(_yfinance_news, timeout_s=6.0, default=[])
 
     def fetch_live_quote(self, ticker: str) -> Dict:
         """
