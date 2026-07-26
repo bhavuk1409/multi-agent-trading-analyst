@@ -26,7 +26,9 @@ from data_handler import DataHandler
 from multi_agent_system import AdvancedMultiAgentSystem
 
 SUPPORTED_TICKERS = ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA"]
-HISTORY_DAYS = 90
+# 400 calendar days ≈ 260 trading days — enough for the 1Y chart selector with
+# a few days of slack for holidays.
+HISTORY_DAYS = 400
 
 # Re-used across warm serverless invocations
 _agent_system = None
@@ -136,7 +138,7 @@ class handler(http.server.BaseHTTPRequestHandler):
                 results["market_data"] = market_data
                 results["news"] = news
 
-                ticker_df = df[df["ticker"] == ticker].tail(30)
+                ticker_df = df[df["ticker"] == ticker]  # full fetched window
                 results["price_history"] = [
                     {"date": str(row["date"]), "close": float(row["close"])}
                     for _, row in ticker_df.iterrows()

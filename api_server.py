@@ -46,8 +46,9 @@ except ImportError as exc:
 SUPPORTED_TICKERS = ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA"]
 
 # How many calendar days of history to fetch for technical indicator calculation.
-# 90 days gives ~63 trading days — enough for all indicators (SMA-50 needs 50).
-HISTORY_DAYS = 90
+# 400 calendar days ≈ 260 trading days — enough for the 1Y chart selector with
+# a few days of slack for holidays.
+HISTORY_DAYS = 400
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
@@ -214,8 +215,10 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
             results["market_data"]  = market_data
             results["news"]         = news
 
-            # Sparkline: last 30 trading days
-            ticker_df = df[df["ticker"] == ticker].tail(30)
+            # Price history: full fetched window. The frontend slices
+            # this array client-side based on the user's selected period
+            # (30D / 60D / 3M / 6M / 1Y).
+            ticker_df = df[df["ticker"] == ticker]  # full fetched window
             results["price_history"] = [
                 {"date": str(row["date"]), "close": float(row["close"])}
                 for _, row in ticker_df.iterrows()

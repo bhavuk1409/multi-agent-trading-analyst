@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { MarketData } from '../types';
 import { HelpTip } from './HelpTip';
@@ -9,10 +10,44 @@ interface MarketReadoutProps {
   history?: { date: string; close: number }[];
 }
 
-function PriceChart({ history }: { history?: { date: string; close: number }[] }) {
-  if (!history || history.length === 0) return null;
+/* ---------- period selector ---------- */
 
-  const prices = history.map(h => h.close);
+type Period = '30D' | '60D' | '3M' | '6M' | '1Y';
+
+/** Number of *trading* days each selector pill covers. Slightly wider than
+ *  literal calendar arithmetic to keep "3M" and "6M" looking like real quarters
+ *  when weekends / holidays are present. */
+const PERIOD_TO_DAYS: Record<Period, number> = {
+  '30D': 30,
+  '60D': 60,
+  '3M':  65,
+  '6M': 130,
+  '1Y': 260,
+};
+
+const PERIODS: Period[] = ['30D', '60D', '3M', '6M', '1Y'];
+
+/* Module-scope mutable so the user's last period survives across re-runs of
+ * `MarketReadout` (each NEW ANALYSIS remounts the component and re-runs
+ * `useState`'s initialiser). Avoids localStorage for now — HMR in dev will
+ * reset it, which is acceptable. */
+let _sharedPeriod: Period = '30D';
+
+function PriceChart({ history, period, onSelectPeriod }: {
+  history?: { date: string; close: number }[];
+  period: Period;
+  onSelectPeriod: (p: Period) => void;
+}) {
+  // Trim to the user's chosen window. Falls back gracefully if the history is
+  // shorter than the requested range (e.g. freshly-listed tickers).
+  const series =
+    history && history.length > 0
+      ? history.slice(-PERIOD_TO_DAYS[period])
+      : [];
+
+  if (series.length === 0) return null;
+
+  const prices = series.map(h => h.close);
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
   const priceRange = maxPrice - minPrice || 1;
@@ -23,8 +58,8 @@ function PriceChart({ history }: { history?: { date: string; close: number }[] }
   const labelGutter = 64;  // left margin for Y-axis tick labels
   const rightGutter = 90;  // right margin for the latest-price label
 
-  const points = history.map((pt, i) => {
-    const x = labelGutter + (i / Math.max(history.length - 1, 1)) * (width - labelGutter - rightGutter);
+  const points = series.map((pt, i) => {
+    const x = labelGutter + (i / Math.max(series.length - 1, 1)) * (width - labelGutter - rightGutter);
     const y = padding + (1 - (pt.close - minPrice) / priceRange) * (height - padding * 2);
     return { x, y };
   });
@@ -37,7 +72,7 @@ function PriceChart({ history }: { history?: { date: string; close: number }[] }
   const lastPt = points[points.length - 1];
   const areaPath = `${linePath} L ${lastPt.x} ${height - padding} L ${firstPt.x} ${height - padding} Z`;
 
-  // 30-day return determines the gradient + stroke tint.
+  // Period-window return determines the gradient + stroke tint.
   const firstClose = prices[0];
   const lastClose = prices[prices.length - 1];
   const isPositive = lastClose >= firstClose;
@@ -53,8 +88,21 @@ function PriceChart({ history }: { history?: { date: string; close: number }[] }
 
   return (
     <div className="price-chart">
+      <div className="price-chart__periods">
+        {PERIODS.map(p => (
+          <button
+            key={p}
+            type="button"
+            className={`price-chart__period ${p === period ? 'price-chart__period--active' : ''}`}
+            onClick={() => onSelectPeriod(p)}
+            aria-pressed={p === period}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
       <div className="price-chart__meta">
-        <span className="price-chart__label faint">30D PRICE TRAJECTORY</span>
+        <span className="price-chart__label faint">{period} PRICE TRAJECTORY</span>
         <span
           className="price-chart__range mono"
           style={{ color: isPositive ? 'var(--buy)' : 'var(--sell)' }}
@@ -266,8 +314,21 @@ function BBBar({ position }: { position: number }) {
 export function MarketReadout({ ticker, data, history }: MarketReadoutProps) {
   const volumeM = (data.volume / 1_000_000).toFixed(1);
 
-  // 30D change pct — used in both the header badge and the chart header.
-  const firstClose = history && history.length > 0 ? history[0].close : data.close;
+  // The chart's period selection lives in this component so the header
+  // badge stays in sync with whatever window the user picked (30D/60D/3M/6M/1Y).
+  const [period, setPeriod] = useState<Period>(_sharedPeriod);
+
+  const selectPeriod = (p: Period) => {
+    _sharedPeriod = p;
+    setPeriod(p);
+  };
+
+  // Period-window change pct — matches whatever the chart is showing.
+  const series =
+    history && history.length > 0
+      ? history.slice(-PERIOD_TO_DAYS[period])
+      : [];
+  const firstClose = series.length > 0 ? series[0].close : data.close;
   const changePct = ((data.close - firstClose) / firstClose) * 100;
   const isPositive = changePct >= 0;
   const changeStr = `${isPositive ? '+' : ''}${changePct.toFixed(2)}%`;
@@ -288,14 +349,14 @@ export function MarketReadout({ ticker, data, history }: MarketReadoutProps) {
               className="market-readout__change"
               style={{ color: isPositive ? 'var(--buy)' : 'var(--sell)' }}
             >
-              {changeStr} <span className="faint" style={{ fontWeight: 500, fontSize: 10 }}>30D</span>
+              {changeStr} <span className="faint" style={{ fontWeight: 500, fontSize: 10 }}>{period}</span>
             </span>
           </div>
         </div>
         <div className="market-readout__badge">LIVE DATA</div>
       </div>
 
-      <PriceChart history={history} />
+      <PriceChart history={history} period={period} onSelectPeriod={selectPeriod} />
 
       <div className="market-readout__grid">
         <StatBlock

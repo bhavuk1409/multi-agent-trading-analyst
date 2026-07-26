@@ -1408,7 +1408,43 @@
   border-radius: var(--radius-sm);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+/* Period selector — sits above the chart header label / range row. */
+.price-chart__periods {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  align-self: flex-end;
+}
+
+.price-chart__period {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 100px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+  text-transform: none;
+}
+
+.price-chart__period:hover {
+  color: var(--text-2);
+}
+
+.price-chart__period--active {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: var(--text);
 }
 
 .price-chart__meta {
