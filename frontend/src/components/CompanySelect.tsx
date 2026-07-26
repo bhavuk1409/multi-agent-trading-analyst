@@ -49,16 +49,11 @@ export function CompanySelect({ selected, onChange, disabled }: CompanySelectPro
         disabled={disabled}
       >
         <div className="company-select__left">
-          {/* Target / Bullseye concentric circles icon */}
-          <div className="company-select__target-icon" aria-hidden="true">
-            <span className="company-select__dot" />
+          <div className="company-select__ticker-mark" aria-hidden="true">
+            {current.ticker}
           </div>
-          
+
           <span className="company-select__name">{current.name}</span>
-          
-          <span className="company-select__status-badge">
-            {current.status}
-          </span>
         </div>
 
         <div className="company-select__right">
@@ -87,11 +82,13 @@ export function CompanySelect({ selected, onChange, disabled }: CompanySelectPro
                 }}
               >
                 <div className="company-select__left">
-                  <div className="company-select__target-icon" style={{ opacity: selected === comp.ticker ? 1 : 0.3 }} aria-hidden="true">
-                    <span className="company-select__dot" />
+                  <div
+                    className="company-select__ticker-mark"
+                    aria-hidden="true"
+                  >
+                    {comp.ticker}
                   </div>
                   <span className="company-select__name">{comp.name}</span>
-                  <span className="company-select__ticker-pill">{comp.ticker}</span>
                 </div>
                 <div className="company-select__right">
                   <span className="company-select__meta">{comp.meta}</span>

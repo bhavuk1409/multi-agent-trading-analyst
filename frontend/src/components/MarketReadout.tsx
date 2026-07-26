@@ -18,10 +18,10 @@ function PriceChart({ history }: { history?: { date: string; close: number }[] }
   const priceRange = maxPrice - minPrice || 1;
 
   const width = 1100;
-  const height = 160;
-  const padding = 16;
-  const labelGutter = 60;  // left margin for Y-axis tick labels
-  const rightGutter = 80;  // right margin for the latest-price label
+  const height = 200;
+  const padding = 18;
+  const labelGutter = 64;  // left margin for Y-axis tick labels
+  const rightGutter = 90;  // right margin for the latest-price label
 
   const points = history.map((pt, i) => {
     const x = labelGutter + (i / Math.max(history.length - 1, 1)) * (width - labelGutter - rightGutter);
@@ -266,6 +266,12 @@ function BBBar({ position }: { position: number }) {
 export function MarketReadout({ ticker, data, history }: MarketReadoutProps) {
   const volumeM = (data.volume / 1_000_000).toFixed(1);
 
+  // 30D change pct — used in both the header badge and the chart header.
+  const firstClose = history && history.length > 0 ? history[0].close : data.close;
+  const changePct = ((data.close - firstClose) / firstClose) * 100;
+  const isPositive = changePct >= 0;
+  const changeStr = `${isPositive ? '+' : ''}${changePct.toFixed(2)}%`;
+
   return (
     <motion.div
       className="market-readout glass"
@@ -276,7 +282,15 @@ export function MarketReadout({ ticker, data, history }: MarketReadoutProps) {
       <div className="market-readout__header">
         <div>
           <div className="market-readout__ticker">{ticker}</div>
-          <div className="market-readout__price">${data.close.toFixed(2)}</div>
+          <div className="market-readout__price-row">
+            <span className="market-readout__price">${data.close.toFixed(2)}</span>
+            <span
+              className="market-readout__change"
+              style={{ color: isPositive ? 'var(--buy)' : 'var(--sell)' }}
+            >
+              {changeStr} <span className="faint" style={{ fontWeight: 500, fontSize: 10 }}>30D</span>
+            </span>
+          </div>
         </div>
         <div className="market-readout__badge">LIVE DATA</div>
       </div>

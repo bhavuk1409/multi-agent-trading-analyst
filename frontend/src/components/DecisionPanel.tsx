@@ -93,6 +93,13 @@ function ActionIcon({ action }: { action: string }) {
   return <IconHold size={28} color="currentColor" strokeWidth={1.8} />;
 }
 
+/** Detect a backend fallback verdict so we render an "incomplete" state
+ * instead of pretending the Coordinator returned a HOLD. */
+function isDecisionFallback(decision: FinalDecision): boolean {
+  const r = (decision.reasoning || '').toLowerCase();
+  return r.includes('unavailable') || r.includes('decision error') || r.includes('decision failed');
+}
+
 export function DecisionPanel({ decision, ticker }: DecisionPanelProps) {
   const actionColor = decision.action === 'buy' ? 'var(--buy)' : decision.action === 'sell' ? 'var(--sell)' : 'var(--hold)';
   const actionBg = decision.action === 'buy' ? 'var(--buy-dim)' : decision.action === 'sell' ? 'var(--sell-dim)' : 'var(--hold-dim)';
@@ -105,6 +112,8 @@ export function DecisionPanel({ decision, ticker }: DecisionPanelProps) {
 
   const confidenceColor =
     decision.confidence > 75 ? 'var(--buy)' : decision.confidence > 55 ? 'var(--hold)' : 'var(--sell)';
+
+  const fallback = isDecisionFallback(decision);
 
   return (
     <motion.div
@@ -122,26 +131,48 @@ export function DecisionPanel({ decision, ticker }: DecisionPanelProps) {
       <div className="decision-panel__top">
         {/* Action badge */}
         <div className="decision-panel__action-wrap">
-          <motion.div
-            className="decision-action"
-            style={{
-              background: actionBg,
-              border: `1.5px solid ${actionBorder}`,
-              color: '#ffffff',
-              boxShadow: `0 0 24px -6px ${actionColor}66`,
-            }}
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 250, damping: 18, delay: 0.1 }}
-          >
-            <ActionIcon action={decision.action} />
-            <span className="decision-action__text">{decision.action.toUpperCase()}</span>
-            <span className="decision-action__ticker">{ticker}</span>
-          </motion.div>
+          {fallback ? (
+            <div className="decision-action decision-action--error">
+              <span className="decision-action__icon" aria-hidden="true">⚠</span>
+              <span className="decision-action__text">NO DECISION</span>
+              <span className="decision-action__ticker">{ticker}</span>
+            </div>
+          ) : (
+            <motion.div
+              className="decision-action"
+              style={{
+                background: actionBg,
+                border: `1.5px solid ${actionBorder}`,
+                color: '#ffffff',
+                boxShadow: `0 0 24px -6px ${actionColor}66`,
+              }}
+              initial={{ scale: 0.7, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 250, damping: 18, delay: 0.1 }}
+            >
+              <ActionIcon action={decision.action} />
+              <span className="decision-action__text">{decision.action.toUpperCase()}</span>
+              <span className="decision-action__ticker">{ticker}</span>
+            </motion.div>
+          )}
 
           <div className="decision-panel__meta">
-            <span className="faint">Final recommendation from</span>
-            <strong style={{ color: 'var(--text)' }}> Coordinator Agent</strong>
+            {fallback ? (
+              <>
+                <span className="decision-panel__meta-line">
+                  <span className="faint">Source:</span>{' '}
+                  <strong style={{ color: 'var(--text)' }}>Coordinator Agent</strong>
+                </span>
+                <span className="decision-panel__meta-sub faint">
+                  Coordinator did not respond. Retry the analysis once the rate limit clears.
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="faint">Final recommendation from</span>
+                <strong style={{ color: 'var(--text)' }}> Coordinator Agent</strong>
+              </>
+            )}
           </div>
         </div>
 
@@ -152,49 +183,55 @@ export function DecisionPanel({ decision, ticker }: DecisionPanelProps) {
               CONFIDENCE
               <HelpTip id="tip-dp-confidence" text={HELP_TEXT.confidence} />
             </span>
-            <span className="decision-metric__value" style={{ color: confidenceColor }}>
-              {decision.confidence}%
+            <span className="decision-metric__value" style={{ color: fallback ? 'var(--text-3)' : confidenceColor }}>
+              {fallback ? '—' : `${decision.confidence}%`}
             </span>
           </div>
           <div className="decision-metric">
             <span className="decision-metric__label">CONVICTION</span>
-            <ConvictionMeter conviction={decision.conviction} />
+            {fallback ? <span className="decision-metric__value decision-metric__value--sm" style={{ color: 'var(--text-3)' }}>—</span> : <ConvictionMeter conviction={decision.conviction} />}
           </div>
           <div className="decision-metric">
             <span className="decision-metric__label">
               POSITION SIZE
               <HelpTip id="tip-dp-position" text={HELP_TEXT.position} />
             </span>
-            <span className="decision-metric__value" style={{ color: 'var(--text)' }}>{(decision.position_size * 100).toFixed(1)}%</span>
+            <span className="decision-metric__value" style={{ color: fallback ? 'var(--text-3)' : 'var(--text)' }}>
+              {fallback ? '—' : `${(decision.position_size * 100).toFixed(1)}%`}
+            </span>
           </div>
           <div className="decision-metric">
             <span className="decision-metric__label">
               TIME HORIZON
               <HelpTip id="tip-dp-horizon" text={HELP_TEXT.horizon} />
             </span>
-            <span className="decision-metric__value decision-metric__value--sm">
-              {decision.time_horizon.replace('-', ' ').toUpperCase()}
+            <span className="decision-metric__value decision-metric__value--sm" style={{ color: fallback ? 'var(--text-3)' : 'var(--text)' }}>
+              {fallback ? '—' : decision.time_horizon.replace('-', ' ').toUpperCase()}
             </span>
-            <span className="decision-metric__sub faint">{horizonLabel}</span>
+            <span className="decision-metric__sub faint">{fallback ? 'No data' : horizonLabel}</span>
           </div>
         </div>
       </div>
 
-      {/* Price levels */}
-      <div className="decision-panel__prices">
-        <h3 className="decision-panel__section-title">PRICE TARGETS</h3>
-        <RiskRewardBar
-          entry={decision.entry_price}
-          stop={decision.stop_loss_price}
-          target={decision.take_profit_price}
-          action={decision.action}
-        />
-      </div>
+      {!fallback && (
+        <>
+          {/* Price levels */}
+          <div className="decision-panel__prices">
+            <h3 className="decision-panel__section-title">PRICE TARGETS</h3>
+            <RiskRewardBar
+              entry={decision.entry_price}
+              stop={decision.stop_loss_price}
+              target={decision.take_profit_price}
+              action={decision.action}
+            />
+          </div>
 
-      <div className="decision-panel__reasoning">
-        <h3 className="decision-panel__section-title">COORDINATOR SYNTHESIS</h3>
-        <p className="decision-panel__reasoning-text">{decision.reasoning}</p>
-      </div>
+          <div className="decision-panel__reasoning">
+            <h3 className="decision-panel__section-title">COORDINATOR SYNTHESIS</h3>
+            <p className="decision-panel__reasoning-text">{decision.reasoning}</p>
+          </div>
+        </>
+      )}
     </motion.div>
   );
 }

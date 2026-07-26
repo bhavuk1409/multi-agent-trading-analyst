@@ -27,7 +27,7 @@ const INITIAL_AGENTS: AgentState[] = [
     id: 'technical',
     name: 'Technical',
     icon: 'technical',
-    color: '#ffffff',
+    color: '#4ecdc4',
     status: 'idle',
     description: 'Chart patterns, RSI/MACD/Bollinger Bands, moving averages, momentum',
   },
@@ -35,7 +35,7 @@ const INITIAL_AGENTS: AgentState[] = [
     id: 'fundamental',
     name: 'Fundamental',
     icon: 'fundamental',
-    color: '#bbbbbb',
+    color: '#f5a623',
     status: 'idle',
     description: 'Valuation, market conditions, financial metrics, industry trends',
   },
@@ -43,7 +43,7 @@ const INITIAL_AGENTS: AgentState[] = [
     id: 'sentiment',
     name: 'Sentiment',
     icon: 'sentiment',
-    color: '#888888',
+    color: '#a78bfa',
     status: 'idle',
     description: 'Real-time news processing, market sentiment, social signals',
   },
@@ -51,7 +51,7 @@ const INITIAL_AGENTS: AgentState[] = [
     id: 'risk',
     name: 'Risk',
     icon: 'risk',
-    color: '#555555',
+    color: '#ff5e5b',
     status: 'idle',
     description: 'Portfolio risk, position sizing, stop-loss / take-profit levels',
   },
@@ -67,6 +67,8 @@ export default function App() {
   const [step, setStep] = useState<'idle' | 'running' | 'synthesising' | 'done'>('idle');
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [watchlistLoading, setWatchlistLoading] = useState(true);
+  const [watchlistFetchedAt, setWatchlistFetchedAt] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(Date.now());
   const agentTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const runGenerationRef = useRef(0);
 
@@ -89,11 +91,19 @@ export default function App() {
       setWatchlistLoading(true);
       const data = await fetchWatchlist();
       if (active && data.length > 0) setWatchlist(data);
+      setWatchlistFetchedAt(Date.now());
       setWatchlistLoading(false);
     };
     load();
     const id = setInterval(load, 60_000);
     return () => { active = false; clearInterval(id); };
+  }, []);
+
+  // Tick a 'now' state every second so the watchlist freshness label
+  // ("Ns ago") updates without us re-running the watcher effect.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
   }, []);
 
   function resetAgents() {
@@ -166,6 +176,28 @@ export default function App() {
 
   const agentKeys = ['technical', 'fundamental', 'sentiment', 'risk'] as const;
 
+  // Watchlist header aggregate — drives "5 stocks · avg +0.42% · 12s ago".
+  const watchlistAggregate = (() => {
+    if (watchlistLoading || watchlist.length === 0) return null;
+    const avg = watchlist.reduce((sum, item) => sum + item.change_pct, 0) / watchlist.length;
+    const sign = avg >= 0 ? '+' : '';
+    return {
+      count: watchlist.length,
+      avgPctStr: `${sign}${avg.toFixed(2)}%`,
+      isPositive: avg >= 0,
+    };
+  })();
+
+  const freshnessLabel = (() => {
+    if (!watchlistFetchedAt) return null;
+    const secAgo = Math.max(0, Math.floor((now - watchlistFetchedAt) / 1000));
+    if (secAgo < 5)  return 'just now';
+    if (secAgo < 60) return `${secAgo}s ago`;
+    const minAgo = Math.floor(secAgo / 60);
+    if (minAgo < 60) return `${minAgo}m ago`;
+    return '1h+ ago';
+  })();
+
   return (
     <>
       <Header apiUp={apiUp} />
@@ -226,6 +258,29 @@ export default function App() {
               <span className="watchlist-pod__title">MARKET WATCHLIST</span>
               <span className="watchlist-pod__status-dot dot dot--live" />
             </div>
+            <div className="watchlist-pod__meta">
+              <span className="watchlist-pod__meta-item">
+                <strong>{watchlistAggregate?.count ?? TICKERS.length}</strong>
+                <span className="faint"> stocks</span>
+              </span>
+              {watchlistAggregate && (
+                <>
+                  <span className="watchlist-pod__meta-sep" aria-hidden="true">·</span>
+                  <span className="watchlist-pod__meta-item">
+                    <span className="faint">avg</span>{' '}
+                    <strong className={watchlistAggregate.isPositive ? 'txt-buy' : 'txt-sell'}>
+                      {watchlistAggregate.avgPctStr}
+                    </strong>
+                  </span>
+                </>
+              )}
+              {freshnessLabel && (
+                <>
+                  <span className="watchlist-pod__meta-sep" aria-hidden="true">·</span>
+                  <span className="watchlist-pod__meta-item faint">{freshnessLabel}</span>
+                </>
+              )}
+            </div>
             <div className="watchlist-list">
               {watchlistLoading
                 ? TICKERS.map(t => (
@@ -245,15 +300,10 @@ export default function App() {
                     const sign      = item.is_positive ? '+' : '';
                     const changeStr = `${sign}${item.change_pct.toFixed(2)}%`;
                     return (
-                      <button
+                      <div
                         key={item.ticker}
                         className={`watchlist-item ${ticker === item.ticker ? 'watchlist-item--active' : ''}`}
-                        onClick={() => {
-                          if (loading) return;
-                          setTicker(item.ticker);
-                          if (step !== 'idle') handleReset();
-                        }}
-                        disabled={loading}
+                        aria-label={`${item.ticker} ${item.is_positive ? 'up' : 'down'} ${changeStr} — informational only, use the selector above to analyse`}
                       >
                         <div className="watchlist-item__left">
                           <span className="watchlist-item__ticker">{item.ticker}</span>
@@ -265,25 +315,30 @@ export default function App() {
                             {changeStr}
                           </span>
                         </div>
-                      </button>
+                      </div>
                     );
                   })
               }
             </div>
           </div>
-          <div className="agent-legend glass">
-            {agents.map(agent => (
-              <div key={agent.id} className="agent-legend__item">
-                <div className={`agent-legend__dot ${agent.status === 'running' ? 'dot--wait' : agent.status === 'done' ? 'dot--live' : 'dot'}`}
-                  style={{ background: agent.status === 'idle' ? 'var(--text-3)' : undefined }}
-                />
-                <span className="agent-legend__name">{agent.name}</span>
-                <span className={`agent-legend__status agent-legend__status--${agent.status}`}>
-                  {agent.status === 'running' ? 'SCANNING' : agent.status === 'done' ? agent.analysis?.recommendation?.toUpperCase() ?? 'DONE' : agent.status === 'error' ? 'ERROR' : 'STANDBY'}
-                </span>
-              </div>
-            ))}
-          </div>
+          {/* Live agent status — only shown while a run is in progress.
+              After completion, the per-agent cards and Final Decision panel
+              already convey the verdict; the legend becomes redundant. */}
+          {(step === 'running' || step === 'synthesising') && (
+            <div className="agent-legend glass">
+              {agents.map(agent => (
+                <div key={agent.id} className="agent-legend__item">
+                  <div className={`agent-legend__dot ${agent.status === 'running' ? 'dot--wait' : agent.status === 'done' ? 'dot--live' : 'dot'}`}
+                    style={{ background: agent.status === 'idle' ? 'var(--text-3)' : undefined }}
+                  />
+                  <span className="agent-legend__name">{agent.name}</span>
+                  <span className={`agent-legend__status agent-legend__status--${agent.status}`}>
+                    {agent.status === 'running' ? 'SCANNING' : agent.status === 'done' ? 'DONE' : agent.status === 'error' ? 'ERROR' : 'STANDBY'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* ====== RIGHT COLUMN: Results ====== */}
@@ -300,11 +355,17 @@ export default function App() {
                 <div className="empty-state__inner">
                   <div className="empty-state__grid" aria-hidden="true" />
                   <div className="pulse-logo pulse-logo--idle">
-                    <svg width="68" height="68" viewBox="0 0 44 44" fill="none">
+                    <svg width="112" height="112" viewBox="0 0 44 44" fill="none">
                       <polygon
                         points="22,3.5 39,13.3 39,33 22,42.8 5,33 5,13.3"
                         stroke="url(#hex-grad-large)"
-                        strokeWidth="3.0"
+                        strokeWidth="2.4"
+                        fill="none"
+                      />
+                      <polygon
+                        points="22,8 35,15.5 35,30.8 22,38.3 9,30.8 9,15.5"
+                        stroke="rgba(255,255,255,0.18)"
+                        strokeWidth="1"
                         fill="none"
                       />
                       <defs>
@@ -323,7 +384,7 @@ export default function App() {
                   </p>
                   <div className="empty-state__agents">
                     {INITIAL_AGENTS.map(a => (
-                      <div key={a.id} className="empty-state__agent-pill" style={{ borderColor: `${a.color}40`, color: a.color }}>
+                      <div key={a.id} className="empty-state__agent-pill">
                         {a.name}
                       </div>
                     ))}
@@ -343,11 +404,17 @@ export default function App() {
                 <div className="empty-state__inner">
                   <div className="empty-state__grid" aria-hidden="true" />
                   <div className="pulse-logo pulse-logo--active">
-                    <svg width="72" height="72" viewBox="0 0 44 44" fill="none">
+                    <svg width="112" height="112" viewBox="0 0 44 44" fill="none">
                       <polygon
                         points="22,3.5 39,13.3 39,33 22,42.8 5,33 5,13.3"
                         stroke="url(#hex-grad-analyzing)"
-                        strokeWidth="3.5"
+                        strokeWidth="2.4"
+                        fill="none"
+                      />
+                      <polygon
+                        points="22,8 35,15.5 35,30.8 22,38.3 9,30.8 9,15.5"
+                        stroke="rgba(255,255,255,0.20)"
+                        strokeWidth="1"
                         fill="none"
                       />
                       <defs>
@@ -378,11 +445,17 @@ export default function App() {
                 <div className="empty-state__inner">
                   <div className="empty-state__grid" aria-hidden="true" />
                   <div className="pulse-logo pulse-logo--active">
-                    <svg width="72" height="72" viewBox="0 0 44 44" fill="none">
+                    <svg width="112" height="112" viewBox="0 0 44 44" fill="none">
                       <polygon
                         points="22,3.5 39,13.3 39,33 22,42.8 5,33 5,13.3"
                         stroke="url(#hex-grad-synthesising)"
-                        strokeWidth="3.5"
+                        strokeWidth="2.4"
+                        fill="none"
+                      />
+                      <polygon
+                        points="22,8 35,15.5 35,30.8 22,38.3 9,30.8 9,15.5"
+                        stroke="rgba(245,166,35,0.30)"
+                        strokeWidth="1"
                         fill="none"
                       />
                       <defs>
@@ -462,7 +535,7 @@ export default function App() {
 
       <footer className="nexus-footer">
         <span className="mono faint">NEXUS · MULTI-AGENT TRADING INTELLIGENCE</span>
-        <span className="mono faint">LangChain · LLaMA 3.3</span>
+        <span className="mono faint">GROQ · LLaMA 3.3 70B</span>
       </footer>
     </>
   );

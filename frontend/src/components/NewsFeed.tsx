@@ -6,35 +6,16 @@ interface NewsFeedProps {
   articles: NewsArticle[];
 }
 
-const SENTIMENT_CONFIG = {
-  positive: {
-    color: 'var(--buy)',
-    bg: 'var(--buy-dim)',
-    icon: (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="18,15 12,9 6,15" />
-      </svg>
-    ),
-  },
-  negative: {
-    color: 'var(--sell)',
-    bg: 'var(--sell-dim)',
-    icon: (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="6,9 12,15 18,9" />
-      </svg>
-    ),
-  },
-  neutral: {
-    color: 'var(--hold)',
-    bg: 'var(--hold-dim)',
-    icon: (
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-        <line x1="5" y1="12" x2="19" y2="12" />
-      </svg>
-    ),
-  },
-};
+/** First letter of the source domain, used as the leading glyph on each row. */
+function sourceInitial(source: string): string {
+  const cleaned = source.replace(/^(https?:\/\/)?(www\.)?/, '').trim();
+  return (cleaned[0] ?? '?').toUpperCase();
+}
+
+/** Pull a clean domain out of a `source` field that may include a path. */
+function sourceDomain(source: string): string {
+  return source.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0];
+}
 
 export function NewsFeed({ articles }: NewsFeedProps) {
   return (
@@ -53,8 +34,8 @@ export function NewsFeed({ articles }: NewsFeedProps) {
 
       <div className="news-feed__list">
         {articles.map((article, i) => {
-          const cfg = SENTIMENT_CONFIG[article.sentiment] ?? SENTIMENT_CONFIG.neutral;
-          const showSentiment = article.sentiment_known !== false;
+          const domain = sourceDomain(article.source);
+          const initial = sourceInitial(domain);
 
           return (
             <motion.a
@@ -67,18 +48,13 @@ export function NewsFeed({ articles }: NewsFeedProps) {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.08, duration: 0.35 }}
             >
-              {showSentiment && (
-                <div
-                  className="news-item__sentiment"
-                  style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}30` }}
-                >
-                  {cfg.icon}
-                </div>
-              )}
+              <div className="news-item__source-mark" aria-hidden="true">
+                {initial}
+              </div>
               <div className="news-item__body">
                 <div className="news-item__title">{article.title}</div>
                 <div className="news-item__meta">
-                  <span className="news-item__source">{article.source}</span>
+                  <span className="news-item__source">{domain}</span>
                   <span className="faint" style={{ fontSize: 10 }}>·</span>
                   <span className="faint">{article.published_date}</span>
                 </div>
