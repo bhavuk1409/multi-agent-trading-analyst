@@ -13,6 +13,7 @@ so LangChain/Groq sessions are reused efficiently.
 import http.server
 import json
 import logging
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
