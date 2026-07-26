@@ -1,4 +1,4 @@
-# NEXUS — Multi-Agent LLM Trading Analyst
+# 📈 NEXUS — Multi-Agent LLM Trading Analyst
 
 Four specialised AI agents — **Technical**, **Fundamental**, **Sentiment**,
 and **Risk** — analyse real market data in parallel and synthesise a final
@@ -46,29 +46,27 @@ position size.
 └─────────────┘
 ```
 
-On Vercel, `api/index.py` serves as the serverless entry point instead of
+On Vercel, `api/index.py` is the serverless entry point instead of
 `api_server.py` — same agent system and data handler underneath, just
 wrapped in a `BaseHTTPRequestHandler` subclass Vercel's Python runtime can
 invoke, with the agent system cached across warm invocations.
 
-**A deliberate design choice worth calling out:** the multi-agent system
-talks to Groq directly through the lightweight `openai` SDK (pointed at
-Groq's OpenAI-compatible endpoint) rather than through LangChain — the code
-comments explicitly frame this as cutting package weight for the Vercel
-serverless bundle. If you've seen other write-ups of this project mention
-LangChain, that's now out of date.
+**Worth knowing:** the multi-agent system talks to Groq directly through the
+lightweight `openai` SDK (pointed at Groq's OpenAI-compatible endpoint)
+rather than through LangChain — the code comments explicitly frame this as
+cutting package weight for the Vercel serverless bundle.
 
 ---
 
-## Data Sources
+## Data sources
 
-| Data | Source | API Key? |
+| Data | Source | API key needed |
 |---|---|---|
-| Price history (OHLCV) | Yahoo Finance via `yfinance` | ❌ Free |
-| Live watchlist quotes | Yahoo Finance via `yfinance` | ❌ Free |
-| News (primary) | Exa neural search | ✅ Optional |
-| News (fallback) | Yahoo Finance headlines | ❌ Free |
-| LLM reasoning | Groq (LLaMA 3.3 70B) | ✅ Required |
+| Price history (OHLCV) | Yahoo Finance via `yfinance` | No — free |
+| Live watchlist quotes | Yahoo Finance via `yfinance` | No — free |
+| News (primary) | Exa neural search | Optional |
+| News (fallback) | Yahoo Finance headlines | No — free |
+| LLM reasoning | Groq (LLaMA 3.3 70B) | Yes — required |
 
 `data_handler.py` is explicit that it never fabricates data: if `yfinance`
 returns nothing for a ticker, it raises a `ValueError` instead of silently
@@ -76,7 +74,7 @@ returning made-up numbers.
 
 ---
 
-## Quick Start
+## Quick start
 
 ### 1. Prerequisites
 
@@ -92,7 +90,7 @@ git clone https://github.com/bhavuk1409/multi-agent-trading-analyst.git
 cd multi-agent-trading-analyst
 
 cp .env.example .env
-# Open .env and set GROQ_API_KEY (and optionally EXA_API_KEY)
+# open .env and set GROQ_API_KEY (and optionally EXA_API_KEY)
 ```
 
 ### 3. Install Python dependencies
@@ -117,18 +115,19 @@ cd frontend && npm install && cd ..
 
 Then open [http://localhost:5174](http://localhost:5174).
 
-> **Manual start** (if you prefer):
-> ```bash
-> # Terminal 1
-> .venv/bin/python api_server.py
->
-> # Terminal 2
-> cd frontend && npm run dev
-> ```
+**Manual start**, if you'd rather run each piece yourself:
+
+```bash
+# Terminal 1
+.venv/bin/python api_server.py
+
+# Terminal 2
+cd frontend && npm run dev
+```
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 ├── api_server.py          # Local Python HTTP API server
@@ -138,7 +137,7 @@ Then open [http://localhost:5174](http://localhost:5174).
 ├── constraints.txt        # pip resolver constraints
 ├── .env.example           # Environment variable template
 ├── config/
-│   └── config.yaml        # LLM model, agent weights
+│   └── config.yaml        # Tickers, LLM model/params, agent weights
 ├── src/
 │   ├── data_handler.py    # yfinance + Exa data fetching, technical indicators
 │   └── multi_agent_system.py   # Direct Groq (openai SDK) agent calls
@@ -166,7 +165,8 @@ Then open [http://localhost:5174](http://localhost:5174).
 
 ## Configuration
 
-Edit `config/config.yaml` to change the LLM model or agent weights:
+Edit `config/config.yaml` to change the tracked tickers, LLM model, or agent
+weights (the four agent weights must sum to 1.0):
 
 ```yaml
 llm:
@@ -182,20 +182,19 @@ agents:
 
 ---
 
-## API Reference
+## API reference
 
 ### `GET /api/health`
 ```json
-{ "status": "ok", "tickers": ["AAPL","GOOGL","MSFT","TSLA","NVDA"] }
+{ "status": "ok", "tickers": ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA"] }
 ```
 
 ### `GET /api/watchlist`
-Returns live quotes for all 5 tickers from Yahoo Finance.
+Live quotes for all 5 tickers from Yahoo Finance.
 ```json
 {
   "quotes": [
-    { "ticker": "AAPL", "price": 333.02, "change": 1.45, "change_pct": 0.44, "is_positive": true },
-    …
+    { "ticker": "AAPL", "price": 333.02, "change": 1.45, "change_pct": 0.44, "is_positive": true }
   ]
 }
 ```
@@ -203,18 +202,18 @@ Returns live quotes for all 5 tickers from Yahoo Finance.
 ### `POST /api/analyze`
 **Body:** `{ "ticker": "AAPL" }`
 
-**Response:**
+**Response (trimmed):**
 ```json
 {
   "ticker": "AAPL",
   "date": "2026-07-26",
-  "market_data": { "close": 333.02, "rsi": 67.7, "macd": 2.1, … },
-  "price_history": [{ "date": "2026-06-27", "close": 310.5 }, …],
-  "news": [{ "title": "…", "source": "…", "sentiment": "neutral" }, …],
-  "technical_analysis":   { "recommendation": "buy", "confidence": 78, "reasoning": "…" },
-  "fundamental_analysis": { "recommendation": "hold", "confidence": 62, "reasoning": "…" },
-  "sentiment_analysis":   { "recommendation": "buy", "confidence": 80, "reasoning": "…" },
-  "risk_analysis":        { "recommendation": "buy", "confidence": 71, "reasoning": "…" },
+  "market_data": { "close": 333.02, "rsi": 67.7, "macd": 2.1 },
+  "price_history": [{ "date": "2026-06-27", "close": 310.5 }],
+  "news": [{ "title": "...", "source": "...", "sentiment": "neutral" }],
+  "technical_analysis":   { "recommendation": "buy", "confidence": 78, "reasoning": "..." },
+  "fundamental_analysis": { "recommendation": "hold", "confidence": 62, "reasoning": "..." },
+  "sentiment_analysis":   { "recommendation": "buy", "confidence": 80, "reasoning": "..." },
+  "risk_analysis":        { "recommendation": "buy", "confidence": 71, "reasoning": "..." },
   "final_decision": {
     "action": "buy",
     "confidence": 75,
@@ -224,7 +223,7 @@ Returns live quotes for all 5 tickers from Yahoo Finance.
     "stop_loss_price": 316.37,
     "take_profit_price": 383.47,
     "time_horizon": "medium-term",
-    "reasoning": "…"
+    "reasoning": "..."
   }
 }
 ```
@@ -235,7 +234,7 @@ also reachable without the `/api` prefix (`/health`, `/watchlist`,
 
 ---
 
-## Supported Tickers
+## Supported tickers
 
 | Ticker | Company |
 |---|---|
@@ -258,7 +257,7 @@ technical-indicator logic in `src/data_handler.py`.
 
 ---
 
-## Tech Stack
+## Tech stack
 
 | Layer | Technology |
 |---|---|
@@ -267,8 +266,8 @@ technical-indicator logic in `src/data_handler.py`.
 | Backend (local) | Python 3 stdlib `http.server` (no framework) |
 | Backend (Vercel) | `api/index.py`, same handler pattern, serverless |
 | LLM | Groq API (LLaMA 3.3 70B) via the `openai` SDK directly — no LangChain |
-| Market Data | yfinance (Yahoo Finance) |
-| News Search | Exa API (optional) |
+| Market data | yfinance (Yahoo Finance) |
+| News search | Exa API (optional) |
 
 ---
 
