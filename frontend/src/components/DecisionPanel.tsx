@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion';
 import type { FinalDecision } from '../types';
 import { IconTrendUp, IconTrendDown, IconHold } from './Icons';
+import { HelpTip } from './HelpTip';
+import { HELP_TEXT } from '../helpText';
 
 interface DecisionPanelProps {
   decision: FinalDecision;
@@ -18,10 +20,12 @@ function RiskRewardBar({ entry, stop, target, action }: { entry: number; stop: n
       <div className="rr-bar__labels">
         <span style={{ color: 'var(--sell)' }}>
           SL ${stop.toFixed(2)} <span className="faint" style={{ fontSize: 10 }}>−{riskPct.toFixed(1)}%</span>
+          <HelpTip id="tip-dp-sl" text={HELP_TEXT.stopLoss} />
         </span>
         <span style={{ color: 'rgba(255,255,255,0.8)' }}>ENTRY ${entry.toFixed(2)}</span>
         <span style={{ color: 'var(--buy)' }}>
           TP ${target.toFixed(2)} <span className="faint" style={{ fontSize: 10 }}>+{rewardPct.toFixed(1)}%</span>
+          <HelpTip id="tip-dp-tp" text={HELP_TEXT.takeProfit} />
         </span>
       </div>
       <div className="rr-bar__track">
@@ -120,7 +124,12 @@ export function DecisionPanel({ decision, ticker }: DecisionPanelProps) {
         <div className="decision-panel__action-wrap">
           <motion.div
             className="decision-action"
-            style={{ background: actionBg, border: `1.5px solid ${actionBorder}`, color: actionColor }}
+            style={{
+              background: actionBg,
+              border: `1.5px solid ${actionBorder}`,
+              color: '#ffffff',
+              boxShadow: `0 0 24px -6px ${actionColor}66`,
+            }}
             initial={{ scale: 0.7, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 250, damping: 18, delay: 0.1 }}
@@ -139,7 +148,10 @@ export function DecisionPanel({ decision, ticker }: DecisionPanelProps) {
         {/* Key metrics */}
         <div className="decision-metrics">
           <div className="decision-metric">
-            <span className="decision-metric__label">CONFIDENCE</span>
+            <span className="decision-metric__label">
+              CONFIDENCE
+              <HelpTip id="tip-dp-confidence" text={HELP_TEXT.confidence} />
+            </span>
             <span className="decision-metric__value" style={{ color: confidenceColor }}>
               {decision.confidence}%
             </span>
@@ -149,11 +161,17 @@ export function DecisionPanel({ decision, ticker }: DecisionPanelProps) {
             <ConvictionMeter conviction={decision.conviction} />
           </div>
           <div className="decision-metric">
-            <span className="decision-metric__label">POSITION SIZE</span>
+            <span className="decision-metric__label">
+              POSITION SIZE
+              <HelpTip id="tip-dp-position" text={HELP_TEXT.position} />
+            </span>
             <span className="decision-metric__value" style={{ color: 'var(--text)' }}>{(decision.position_size * 100).toFixed(1)}%</span>
           </div>
           <div className="decision-metric">
-            <span className="decision-metric__label">TIME HORIZON</span>
+            <span className="decision-metric__label">
+              TIME HORIZON
+              <HelpTip id="tip-dp-horizon" text={HELP_TEXT.horizon} />
+            </span>
             <span className="decision-metric__value decision-metric__value--sm">
               {decision.time_horizon.replace('-', ' ').toUpperCase()}
             </span>

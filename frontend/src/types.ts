@@ -47,7 +47,10 @@ export interface NewsArticle {
   published_date: string;
   summary:        string;
   source:         string;
+  /** Always 'neutral' from the current backend; reserved for future per-article sentiment. */
   sentiment:      'positive' | 'negative' | 'neutral';
+  /** When true, hide the sentiment icon (sentiment hasn't been classified yet). */
+  sentiment_known?: boolean;
 }
 
 export interface AnalysisResults {

@@ -64,10 +64,11 @@ export default function App() {
   const [results, setResults] = useState<AnalysisResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<'idle' | 'running' | 'done'>('idle');
+  const [step, setStep] = useState<'idle' | 'running' | 'synthesising' | 'done'>('idle');
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [watchlistLoading, setWatchlistLoading] = useState(true);
   const agentTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const runGenerationRef = useRef(0);
 
   // Health-check every 10 s
   useEffect(() => {
@@ -110,17 +111,32 @@ export default function App() {
     setStep('running');
     resetAgents();
 
-    // Animate agents sequentially
+    // Bump generation so any in-flight timers / promises from a previous run
+    // no-op when they eventually fire.
+    const generation = ++runGenerationRef.current;
+
+    // Animate agents lighting up almost simultaneously so all four are
+    // "scanning" before the parallel backend resolves (~450 ms total).
     const agentIds = ['technical', 'fundamental', 'sentiment', 'risk'];
     agentIds.forEach((id, i) => {
       const t = setTimeout(() => {
+        if (runGenerationRef.current !== generation) return;
         setAgents(prev => prev.map(a => a.id === id ? { ...a, status: 'running' } : a));
-      }, i * 900);
+      }, i * 150);
       agentTimersRef.current.push(t);
     });
 
     try {
       const data = await runAnalysis(ticker);
+
+      // A newer run started while we were awaiting the API — discard this result.
+      if (runGenerationRef.current !== generation) return;
+
+      // Brief synthesising interstitial so the user sees the Coordinator step
+      // — otherwise the parallel agents appear to "freeze" before the decision.
+      setStep('synthesising');
+      await new Promise<void>(r => setTimeout(r, 300));
+      if (runGenerationRef.current !== generation) return;
 
       // Map results onto agent states
       setAgents(prev => prev.map(a => {
@@ -132,11 +148,12 @@ export default function App() {
       setResults(data);
       setStep('done');
     } catch (e) {
+      if (runGenerationRef.current !== generation) return;
       setError(e instanceof Error ? e.message : 'Analysis failed.');
       setAgents(prev => prev.map(a => ({ ...a, status: 'error' })));
       setStep('idle');
     } finally {
-      setLoading(false);
+      if (runGenerationRef.current === generation) setLoading(false);
     }
   }
 
@@ -168,7 +185,7 @@ export default function App() {
             />
 
             <div className="control-pod__actions">
-              {step === 'idle' || step === 'running' ? (
+              {step === 'idle' || step === 'running' || step === 'synthesising' ? (
                 <button
                   id="run-analysis-btn"
                   className="btn btn--primary run-btn"
@@ -345,6 +362,41 @@ export default function App() {
                   <p className="empty-state__desc">
                     Retrieving market statistics and running multi-agent consensus chains...<br />
                     This process compiles real-time feeds and technical signals.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
+            {step === 'synthesising' && !results && (
+              <motion.div
+                key="synthesising-state"
+                className="empty-state"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, scale: 0.97 }}
+              >
+                <div className="empty-state__inner">
+                  <div className="empty-state__grid" aria-hidden="true" />
+                  <div className="pulse-logo pulse-logo--active">
+                    <svg width="72" height="72" viewBox="0 0 44 44" fill="none">
+                      <polygon
+                        points="22,3.5 39,13.3 39,33 22,42.8 5,33 5,13.3"
+                        stroke="url(#hex-grad-synthesising)"
+                        strokeWidth="3.5"
+                        fill="none"
+                      />
+                      <defs>
+                        <linearGradient id="hex-grad-synthesising" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                          <stop offset="0%" stopColor="#f5a623" />
+                          <stop offset="100%" stopColor="#1a1a1a" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </div>
+                  <h2 className="empty-state__title" style={{ letterSpacing: '0.24em' }}>SYNTHESISING FINAL CALL</h2>
+                  <p className="empty-state__desc">
+                    All four agents have returned their analyses.<br />
+                    Coordinator Agent is merging them into a single recommendation…
                   </p>
                 </div>
               </motion.div>

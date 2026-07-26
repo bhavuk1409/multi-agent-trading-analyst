@@ -54,6 +54,7 @@ export function NewsFeed({ articles }: NewsFeedProps) {
       <div className="news-feed__list">
         {articles.map((article, i) => {
           const cfg = SENTIMENT_CONFIG[article.sentiment] ?? SENTIMENT_CONFIG.neutral;
+          const showSentiment = article.sentiment_known !== false;
 
           return (
             <motion.a
@@ -66,12 +67,14 @@ export function NewsFeed({ articles }: NewsFeedProps) {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.08, duration: 0.35 }}
             >
-              <div
-                className="news-item__sentiment"
-                style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}30` }}
-              >
-                {cfg.icon}
-              </div>
+              {showSentiment && (
+                <div
+                  className="news-item__sentiment"
+                  style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.color}30` }}
+                >
+                  {cfg.icon}
+                </div>
+              )}
               <div className="news-item__body">
                 <div className="news-item__title">{article.title}</div>
                 <div className="news-item__meta">

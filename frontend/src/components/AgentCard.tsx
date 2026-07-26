@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion';
 import type { AgentAnalysis, AgentState } from '../types';
 import { IconTechnical, IconFundamental, IconSentiment, IconRisk } from './Icons';
+import { HelpTip } from './HelpTip';
+import { HELP_TEXT } from '../helpText';
 
 interface AgentCardProps {
   agent: AgentState;
@@ -90,7 +92,10 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
       {/* Confidence bar */}
       <div className="agent-card__confidence">
         <div className="agent-card__conf-header">
-          <span className="faint">Confidence</span>
+          <span className="faint">
+            Confidence
+            <HelpTip id={`tip-confidence-${agent.id}`} text={HELP_TEXT.confidence} />
+          </span>
           <span className="mono" style={{ color: signalColor }}>{analysis.confidence}%</span>
         </div>
         <div className="agent-card__conf-track">

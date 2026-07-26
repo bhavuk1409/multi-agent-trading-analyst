@@ -6,13 +6,14 @@ Direct REST calls with `response_format={"type": "json_object"}` ensure fast,
 reliable structured JSON output with zero heavy LangChain package overhead.
 """
 
+import asyncio
 import json
 import logging
 import os
 import re
 from typing import Any, Dict, List
 
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,10 @@ class AdvancedMultiAgentSystem:
             base_url="https://api.groq.com/openai/v1",
             api_key=api_key,
         )
+        self.async_client = AsyncOpenAI(
+            base_url="https://api.groq.com/openai/v1",
+            api_key=api_key,
+        )
 
         logger.info(f"✓ Multi-agent system initialized with Groq model: {model}")
 
@@ -80,6 +85,33 @@ class AdvancedMultiAgentSystem:
         content = response.choices[0].message.content or "{}"
         cleaned = _clean_json_text(content)
         return json.loads(cleaned)
+
+    async def _acall_llm(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+        """Async variant of _call_llm — used for parallel agent execution."""
+        response = await self.async_client.chat.completions.create(
+            model=self.model_name,
+            temperature=self.temperature,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+        )
+        content = response.choices[0].message.content or "{}"
+        cleaned = _clean_json_text(content)
+        return json.loads(cleaned)
+
+    async def _run_agent(self, cfg_key: str, sys_p: str, usr_p: str) -> Dict[str, Any]:
+        """Run a single agent, honoring the `enabled` flag and falling back to
+        _default_analysis() on any exception so that asyncio.gather() never sees
+        a raised task (one agent's failure cannot break the others)."""
+        if not self.agent_config.get(cfg_key, {}).get("enabled", True):
+            return self._default_analysis()
+        try:
+            return await self._acall_llm(sys_p, usr_p)
+        except Exception as e:
+            logger.error(f"{cfg_key} error: {e}")
+            return self._default_analysis()
 
     def analyze(
         self,
@@ -101,65 +133,63 @@ class AdvancedMultiAgentSystem:
         logger.info(f"🤖 Running multi-agent analysis for {ticker} on {date}")
         results = {}
 
-        # 1. Technical Analysis
-        if self.agent_config.get("technical_analyst", {}).get("enabled", True):
-            try:
-                sys_p = (
+        # Run the four specialist agents concurrently via asyncio.gather.
+        # Each agent has its own try/except inside _run_agent, so a single
+        # failure surfaces as _default_analysis() rather than cancelling siblings.
+        agent_specs = [
+            (
+                "technical_analyst",
+                (
                     "You are a technical analyst specializing in stock chart patterns and technical indicators.\n"
                     "Analyze the technical indicators and return ONLY a JSON object:\n"
                     '{"recommendation": "buy|sell|hold", "confidence": <0-100>, "reasoning": "<explanation>"}'
-                )
-                usr_p = f"Ticker: {ticker}\nDate: {date}\nTechnical Indicators:\n{self._format_technical(market_data)}"
-                results["technical_analysis"] = self._call_llm(sys_p, usr_p)
-                logger.info("  ✓ Technical analysis complete")
-            except Exception as e:
-                logger.error(f"Technical analysis error: {e}")
-                results["technical_analysis"] = self._default_analysis()
-
-        # 2. Fundamental Analysis
-        if self.agent_config.get("fundamental_analyst", {}).get("enabled", True):
-            try:
-                sys_p = (
+                ),
+                f"Ticker: {ticker}\nDate: {date}\nTechnical Indicators:\n{self._format_technical(market_data)}",
+            ),
+            (
+                "fundamental_analyst",
+                (
                     "You are a fundamental analyst specializing in company valuation and market conditions.\n"
                     "Analyze the market metrics and return ONLY a JSON object:\n"
                     '{"recommendation": "buy|sell|hold", "confidence": <0-100>, "reasoning": "<explanation>"}'
-                )
-                usr_p = f"Ticker: {ticker}\nDate: {date}\nMarket Data:\n{self._format_fundamental(market_data)}"
-                results["fundamental_analysis"] = self._call_llm(sys_p, usr_p)
-                logger.info("  ✓ Fundamental analysis complete")
-            except Exception as e:
-                logger.error(f"Fundamental analysis error: {e}")
-                results["fundamental_analysis"] = self._default_analysis()
-
-        # 3. Sentiment Analysis
-        if self.agent_config.get("sentiment_analyst", {}).get("enabled", True):
-            try:
-                sys_p = (
+                ),
+                f"Ticker: {ticker}\nDate: {date}\nMarket Data:\n{self._format_fundamental(market_data)}",
+            ),
+            (
+                "sentiment_analyst",
+                (
                     "You are a sentiment analyst specializing in news processing and market sentiment.\n"
                     "Analyze recent news articles and return ONLY a JSON object:\n"
                     '{"recommendation": "buy|sell|hold", "confidence": <0-100>, "reasoning": "<explanation>"}'
-                )
-                usr_p = f"Ticker: {ticker}\nDate: {date}\nRecent News Headlines:\n{self._format_news(news)}"
-                results["sentiment_analysis"] = self._call_llm(sys_p, usr_p)
-                logger.info("  ✓ Sentiment analysis complete")
-            except Exception as e:
-                logger.error(f"Sentiment analysis error: {e}")
-                results["sentiment_analysis"] = self._default_analysis()
-
-        # 4. Risk Manager Assessment
-        if self.agent_config.get("risk_manager", {}).get("enabled", True):
-            try:
-                sys_p = (
+                ),
+                f"Ticker: {ticker}\nDate: {date}\nRecent News Headlines:\n{self._format_news(news)}",
+            ),
+            (
+                "risk_manager",
+                (
                     "You are a risk manager assessing portfolio volatility, beta, and downside risk.\n"
                     "Assess risk factors and return ONLY a JSON object:\n"
                     '{"recommendation": "buy|sell|hold", "confidence": <0-100>, "reasoning": "<explanation>"}'
-                )
-                usr_p = f"Ticker: {ticker}\nDate: {date}\nRisk Snapshot:\n{self._format_risk(market_data)}"
-                results["risk_analysis"] = self._call_llm(sys_p, usr_p)
-                logger.info("  ✓ Risk analysis complete")
-            except Exception as e:
-                logger.error(f"Risk analysis error: {e}")
-                results["risk_analysis"] = self._default_analysis()
+                ),
+                f"Ticker: {ticker}\nDate: {date}\nRisk Snapshot:\n{self._format_risk(market_data)}",
+            ),
+        ]
+        result_keys = [
+            "technical_analysis",
+            "fundamental_analysis",
+            "sentiment_analysis",
+            "risk_analysis",
+        ]
+
+        async def _gather_agents() -> list[Dict[str, Any]]:
+            tasks = [self._run_agent(cfg_key, sys_p, usr_p)
+                     for cfg_key, sys_p, usr_p in agent_specs]
+            return await asyncio.gather(*tasks)
+
+        gathered = asyncio.run(_gather_agents())
+        for key, payload in zip(result_keys, gathered):
+            results[key] = payload
+        logger.info("  ✓ All 4 specialist agents complete (parallel)")
 
         # 5. Coordinator Decision
         try:
@@ -184,7 +214,8 @@ class AdvancedMultiAgentSystem:
                 f"Ticker: {ticker}\n"
                 f"Date: {date}\n"
                 f"Current Price: ${current_price:.2f}\n\n"
-                f"Agent Analyses:\n{self._format_agent_results(results)}"
+                f"Agent Analyses (relative weights shown, total 1.0):\n"
+                f"{self._format_agent_results(results, include_weights=True)}"
             )
             results["final_decision"] = self._call_llm(sys_p, usr_p)
             logger.info("  ✓ Final decision made")
@@ -228,14 +259,25 @@ class AdvancedMultiAgentSystem:
             lines.append(f"- {item.get('title', 'N/A')} ({item.get('source', 'Unknown')})")
         return "\n".join(lines)
 
-    def _format_agent_results(self, results: Dict[str, Any]) -> str:
+    def _format_agent_results(self, results: Dict[str, Any], include_weights: bool = False) -> str:
+        cfg_map = {
+            "technical_analysis":   "technical_analyst",
+            "fundamental_analysis": "fundamental_analyst",
+            "sentiment_analysis":   "sentiment_analyst",
+            "risk_analysis":        "risk_manager",
+        }
+        weights = {k: float(self.agent_config.get(v, {}).get("weight", 0.25))
+                   for k, v in cfg_map.items()}
+        total = sum(weights.values()) or 1.0
         lines = []
         for k in ["technical_analysis", "fundamental_analysis", "sentiment_analysis", "risk_analysis"]:
             if k in results:
                 a = results[k]
-                name = k.replace("_", " ").title()
+                header = k.replace("_", " ").title()
+                if include_weights:
+                    header += f"  [weight={weights[k] / total:.2f}]"
                 lines.append(
-                    f"{name}:\n"
+                    f"{header}:\n"
                     f"- Recommendation: {a.get('recommendation', 'N/A')}\n"
                     f"- Confidence: {a.get('confidence', 0)}%\n"
                     f"- Reasoning: {a.get('reasoning', 'N/A')}\n"
