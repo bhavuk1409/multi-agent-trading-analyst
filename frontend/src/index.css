@@ -105,6 +105,22 @@ body {
   overflow: hidden;
 }
 
+@media (max-width: 1024px) {
+  body {
+    height: auto;
+    min-height: 100vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  #root {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+    padding: 0 12px 24px;
+  }
+}
+
 /* ===== TYPOGRAPHY ===== */
 .display { font-family: var(--font-display); }
 .mono { font-family: var(--font-mono); }
