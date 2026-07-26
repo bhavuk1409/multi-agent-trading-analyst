@@ -1,4 +1,4 @@
-# NEXUS — Multi-Agent LLM Trading Analyst
+# Nexus — Multi-Agent LLM Trading Analyst
 
 Four specialised AI agents — **Technical**, **Fundamental**, **Sentiment**,
 and **Risk** — analyse real market data in parallel and synthesise a final
