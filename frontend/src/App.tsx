@@ -57,6 +57,12 @@ const INITIAL_AGENTS: AgentState[] = [
   },
 ];
 
+// Easing for the price-counter animation. easeOutCubic — price decelerates
+// into the new value, which feels snappier than a linear ramp.
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+const PRICE_TICK_MS = 420;          // duration of one counter animation
+const PRICE_TICK_FPS = 60;          // smoothness target
+
 export default function App() {
   const [ticker, setTicker] = useState<Ticker>('AAPL');
   const [apiUp, setApiUp] = useState<boolean | null>(null);
@@ -71,6 +77,21 @@ export default function App() {
   const [now, setNow] = useState<number>(Date.now());
   const agentTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const runGenerationRef = useRef(0);
+  // Live ticking prices — separate from `watchlist[].price` so we can animate
+  // the displayed digits from the old value to the new one over ~400 ms
+  // instead of jumping. The backend `price` is the source of truth; this
+  // mirror just lags behind it briefly.
+  const [displayedPrices, setDisplayedPrices] = useState<Record<Ticker, number>>(
+    { AAPL: 0, GOOGL: 0, MSFT: 0, TSLA: 0, NVDA: 0 } as Record<Ticker, number>,
+  );
+  const tickAnimRef = useRef<{
+    raf: number | null;
+    rafTickEnd: number;   // ms timestamp when the current animation finishes
+    rafFrom: number;
+    rafTo: number;
+  }>({ raf: null, rafTickEnd: 0, rafFrom: 0, rafTo: 0 });
+  // Per-ticker rAF handles so animation for each ticker runs independently.
+  const tickerRafRef = useRef<Partial<Record<Ticker, number>>>({});
 
   // Health-check every 10 s
   useEffect(() => {
@@ -106,6 +127,13 @@ export default function App() {
           const prevByTicker = new Map(prev.map(p => [p.ticker, p]));
           return data.map(d => ({ ...d, _flash: prevByTicker.get(d.ticker)?._flash }));
         });
+        // Seed the displayed-price counter with the snapshot values so the
+        // first render already shows real prices (no "0.00" flicker).
+        setDisplayedPrices(prev => {
+          const next = { ...prev };
+          for (const d of data) next[d.ticker] = d.price;
+          return next;
+        });
       }
       setWatchlistFetchedAt(Date.now());
       setWatchlistLoading(false);
@@ -138,6 +166,28 @@ export default function App() {
       // bump freshness label so the "Xs ago" line stays accurate
       setWatchlistFetchedAt(Date.now());
 
+      // Animate the displayed price from its current value to the new target.
+      // If a tick arrives mid-animation, the new animation starts from wherever
+      // the digits are now — so the counter keeps moving smoothly instead of
+      // snapping to the new value.
+      const existingHandle = tickerRafRef.current[ticker];
+      if (existingHandle) cancelAnimationFrame(existingHandle);
+      const startValue = displayedPrices[ticker] ?? price;
+      const startTs = performance.now();
+      const animate = (now: number) => {
+        const elapsed = now - startTs;
+        const t = Math.min(1, elapsed / PRICE_TICK_MS);
+        const eased = easeOutCubic(t);
+        const value = startValue + (price - startValue) * eased;
+        setDisplayedPrices(prev => ({ ...prev, [ticker]: value }));
+        if (t < 1) {
+          tickerRafRef.current[ticker] = requestAnimationFrame(animate);
+        } else {
+          tickerRafRef.current[ticker] = undefined;
+        }
+      };
+      tickerRafRef.current[ticker] = requestAnimationFrame(animate);
+
       // Clear the flash class after the CSS animation completes.
       if (didFlash) {
         setTimeout(() => {
@@ -166,6 +216,13 @@ export default function App() {
       active = false;
       if (pollId) clearInterval(pollId);
       closeStream?.();
+      // Cancel any in-flight price-counter animations so we don't call
+      // setState on an unmounted component.
+      for (const t of Object.keys(tickerRafRef.current) as Ticker[]) {
+        const h = tickerRafRef.current[t];
+        if (h) cancelAnimationFrame(h);
+      }
+      tickerRafRef.current = {};
     };
   }, []);
 
@@ -366,7 +423,16 @@ export default function App() {
                     </div>
                   ))
                 : watchlist.map((item) => {
-                    const priceStr  = `$${item.price.toFixed(2)}`;
+                    // Prefer the animated `displayedPrice` (lags behind
+                    // `item.price` for ~400 ms after a tick) so the digits
+                    // visibly count up/down to the new value instead of
+                    // jumping. Fall back to `item.price` if the counter
+                    // hasn't been seeded yet (first render).
+                    const displayed =
+                      displayedPrices[item.ticker] > 0
+                        ? displayedPrices[item.ticker]
+                        : item.price;
+                    const priceStr  = `$${displayed.toFixed(2)}`;
                     const sign      = item.is_positive ? '+' : '';
                     const changeStr = `${sign}${item.change_pct.toFixed(2)}%`;
                     return (
