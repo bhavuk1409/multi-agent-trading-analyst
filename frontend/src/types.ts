@@ -10,6 +10,8 @@ export interface WatchlistItem {
   change:      number;   // e.g. -4.12
   change_pct:  number;   // e.g. -1.22
   is_positive: boolean;
+  /** Transient: set briefly when a real-time tick changes the price. */
+  _flash?:     'up' | 'down' | null;
 }
 
 export interface AgentAnalysis {

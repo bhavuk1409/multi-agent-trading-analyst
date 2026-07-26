@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import './App.css';
 
 import type { AgentState, AnalysisResults, Ticker, WatchlistItem } from './types';
-import { checkHealth, runAnalysis, fetchWatchlist } from './api';
+import { checkHealth, runAnalysis, fetchWatchlist, connectWatchlistStream } from './api';
 import { Header } from './components/Header';
 import { AgentCard } from './components/AgentCard';
 import { MarketReadout } from './components/MarketReadout';
@@ -84,19 +84,89 @@ export default function App() {
     return () => { active = false; clearInterval(id); };
   }, []);
 
-  // Live watchlist on mount — refetch every 60 s
+  // Live watchlist:
+  //   1. Initial snapshot via fetchWatchlist() — establishes the prev_close
+  //      baseline so change_pct is meaningful.
+  //   2. EventSource pushes per-tick prices from Finnhub (sub-second).
+  //   3. If the SSE stream errors out (e.g. missing FINNHUB_API_KEY on the
+  //      server), the frontend falls back to 5 s polling of fetchWatchlist()
+  //      so the UI still feels alive.
   useEffect(() => {
     let active = true;
+    let pollId: ReturnType<typeof setInterval> | null = null;
+    let closeStream: (() => void) | null = null;
+
     const load = async () => {
       setWatchlistLoading(true);
       const data = await fetchWatchlist();
-      if (active && data.length > 0) setWatchlist(data);
+      if (active && data.length > 0) {
+        setWatchlist(prev => {
+          // Preserve any prior `_flash` markers if the new fetch returns the
+          // same ticker (cheap way to avoid stripping transient flash state).
+          const prevByTicker = new Map(prev.map(p => [p.ticker, p]));
+          return data.map(d => ({ ...d, _flash: prevByTicker.get(d.ticker)?._flash }));
+        });
+      }
       setWatchlistFetchedAt(Date.now());
       setWatchlistLoading(false);
     };
+
+    const startFallbackPolling = () => {
+      if (pollId) return;
+      pollId = setInterval(load, 5_000);
+    };
+
+    const onTick = (ticker: Ticker, price: number) => {
+      if (!active) return;
+      let didFlash = false;
+      setWatchlist(prev => prev.map(item => {
+        if (item.ticker !== ticker) return item;
+        const prevClose = item.price - item.change;
+        const dir: 'up' | 'down' | null =
+          price > item.price ? 'up' :
+          price < item.price ? 'down' : null;
+        if (dir) didFlash = true;
+        return {
+          ...item,
+          price,
+          change:      price - prevClose,
+          change_pct:  prevClose ? ((price - prevClose) / prevClose) * 100 : 0,
+          is_positive: price >= prevClose,
+          _flash:      dir ?? item._flash,
+        };
+      }));
+      // bump freshness label so the "Xs ago" line stays accurate
+      setWatchlistFetchedAt(Date.now());
+
+      // Clear the flash class after the CSS animation completes.
+      if (didFlash) {
+        setTimeout(() => {
+          if (!active) return;
+          setWatchlist(prev => prev.map(it => it.ticker === ticker ? { ...it, _flash: null } : it));
+        }, 320);
+      }
+    };
+
     load();
-    const id = setInterval(load, 60_000);
-    return () => { active = false; clearInterval(id); };
+    closeStream = connectWatchlistStream(
+      onTick,
+      (status) => {
+        if (status === 'error') {
+          // Stream failed (likely missing FINNHUB_API_KEY) — fall back to polling.
+          startFallbackPolling();
+        } else if (status === 'open' && pollId) {
+          // Stream came back — stop polling, ticks handle refresh.
+          clearInterval(pollId);
+          pollId = null;
+        }
+      },
+    );
+
+    return () => {
+      active = false;
+      if (pollId) clearInterval(pollId);
+      closeStream?.();
+    };
   }, []);
 
   // Tick a 'now' state every second so the watchlist freshness label
@@ -310,7 +380,11 @@ export default function App() {
                           <span className="watchlist-item__name">{TICKER_NAMES[item.ticker]}</span>
                         </div>
                         <div className="watchlist-item__right">
-                          <span className="watchlist-item__price">{priceStr}</span>
+                          <span className={
+                            'watchlist-item__price' +
+                            (item._flash === 'up'   ? ' watchlist-item__price--flash-up'   : '') +
+                            (item._flash === 'down' ? ' watchlist-item__price--flash-down' : '')
+                          }>{priceStr}</span>
                           <span className={`watchlist-item__change ${item.is_positive ? 'txt-buy' : 'txt-sell'}`}>
                             {changeStr}
                           </span>

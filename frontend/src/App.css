@@ -1369,6 +1369,19 @@
   color: var(--text);
 }
 
+/* Real-time price flash — applied for ~300 ms when a tick moves the price.
+   Two color stories so the user can read up vs down at a glance. */
+@keyframes price-flash-up {
+  0%   { color: var(--buy);  text-shadow: 0 0 12px rgba(80,220,140,0.55); }
+  100% { color: var(--text); text-shadow: none; }
+}
+@keyframes price-flash-down {
+  0%   { color: var(--sell); text-shadow: 0 0 12px rgba(255,94,91,0.55); }
+  100% { color: var(--text); text-shadow: none; }
+}
+.watchlist-item__price--flash-up   { animation: price-flash-up   320ms ease-out; }
+.watchlist-item__price--flash-down { animation: price-flash-down 320ms ease-out; }
+
 .watchlist-item__change {
   font-family: var(--font-mono);
   font-size: 9.5px;

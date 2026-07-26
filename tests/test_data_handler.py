@@ -299,3 +299,108 @@ def test_market_summary_exposes_new_fields(handler):
                 "atr_14", "drawdown",
                 "close_prev_1", "close_prev_5", "close_prev_20"):
         assert key in summary, f"market_summary missing {key}"
+
+
+# ---------------------------------------------------------------------------
+# Real-time quote stream — feeds canned trades through a fake WebSocket
+# ---------------------------------------------------------------------------
+
+import asyncio as _asyncio
+import json as _json
+from unittest.mock import AsyncMock, patch
+
+
+class _FakeCM:
+    """Async context manager that resolves to a given object on __aenter__."""
+    def __init__(self, target):
+        self._target = target
+
+    async def __aenter__(self):
+        return self._target
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeWS:
+    """Drop-in replacement for a websockets connection that yields a
+    canned sequence of inbound messages and records outbound sends."""
+
+    def __init__(self, inbound_messages):
+        self._inbound = list(inbound_messages)
+        self.sent: list[str] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def send(self, msg):
+        self.sent.append(msg)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        if not self._inbound:
+            raise StopAsyncIteration
+        return self._inbound.pop(0)
+
+
+def test_subscribe_quotes_yields_trades():
+    """aiter_quote_stream should subscribe to each ticker and yield (s, p)
+    pairs parsed from Finnhub's trade messages."""
+    import sys
+    from data_handler import aiter_quote_stream
+
+    messages = [
+        _json.dumps({"type": "trade", "data": [
+            {"s": "AAPL", "p": 333.07, "t": 1700000000000, "v": 100},
+            {"s": "TSLA", "p": 313.10, "t": 1700000000000, "v": 50},
+        ]}),
+        _json.dumps({"type": "trade", "data": [
+            {"s": "AAPL", "p": 333.10, "t": 1700000000001, "v": 25},
+        ]}),
+    ]
+    fake = _FakeWS(messages)
+
+    async def _run():
+        with patch("data_handler._websockets.connect", lambda *a, **kw: _FakeCM(fake)):
+            out = []
+            async for t, p in aiter_quote_stream(["AAPL", "TSLA"], api_key="test"):
+                out.append((t, p))
+                if len(out) >= 3:
+                    break
+        return out
+
+    result = _asyncio.run(_run())
+    assert result == [("AAPL", 333.07), ("TSLA", 313.10), ("AAPL", 333.10)], result
+
+    # Verify subscription messages were sent for both tickers.
+    subs = [_json.loads(m) for m in fake.sent]
+    assert {m["symbol"] for m in subs} == {"AAPL", "TSLA"}
+    assert all(m["type"] == "subscribe" for m in subs)
+
+
+def test_subscribe_quotes_skips_non_trade_messages():
+    """Ping / control / error messages from Finnhub should be ignored."""
+    from data_handler import aiter_quote_stream
+
+    messages = [
+        _json.dumps({"type": "ping"}),
+        _json.dumps({"type": "error", "msg": "invalid symbol"}),
+        _json.dumps({"type": "trade", "data": [{"s": "GOOGL", "p": 319.74, "t": 1, "v": 1}]}),
+    ]
+    fake = _FakeWS(messages)
+
+    async def _run():
+        with patch("data_handler._websockets.connect", lambda *a, **kw: _FakeCM(fake)):
+            out = []
+            async for t, p in aiter_quote_stream(["GOOGL"], api_key="test"):
+                out.append((t, p))
+                break
+        return out
+
+    result = _asyncio.run(_run())
+    assert result == [("GOOGL", 319.74)], result

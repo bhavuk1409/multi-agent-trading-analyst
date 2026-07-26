@@ -15,3 +15,6 @@ openai>=1.0.0
 
 # News search (optional — falls back to yfinance headlines)
 exa-py>=1.15.6
+
+# Real-time WebSocket client (Finnhub price stream)
+websockets>=12.0

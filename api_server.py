@@ -35,6 +35,11 @@ try:
     import yaml
     from data_handler import DataHandler
     from multi_agent_system import AdvancedMultiAgentSystem
+    try:
+        from data_handler import iter_quote_stream
+    except Exception as _exc:
+        logger.warning(f"iter_quote_stream unavailable: {_exc}")
+        iter_quote_stream = None
 except ImportError as exc:
     logger.error(f"Import error: {exc}")
     logger.error("Activate the virtual environment and run: pip install -r requirements.txt")
@@ -126,6 +131,8 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
             self._handle_watchlist()
         elif self.path == "/api/tickers":
             self._json_ok({"tickers": SUPPORTED_TICKERS})
+        elif self.path == "/api/stream/watchlist":
+            self._handle_sse_watchlist()
         else:
             self._json_error(404, "Not found")
 
@@ -152,6 +159,36 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
         except Exception as exc:
             logger.exception("Watchlist fetch failed")
             self._json_error(500, str(exc))
+
+    def _handle_sse_watchlist(self):
+        """Stream per-tick prices as Server-Sent Events from Finnhub.
+
+        For local dev only — Vercel uses the same route in api/index.py.
+        Runs until the client disconnects; no Vercel reap on the local server.
+        """
+        api_key = os.getenv("FINNHUB_API_KEY")
+        if not api_key:
+            self._json_error(503, "FINNHUB_API_KEY not configured")
+            return
+        if iter_quote_stream is None:
+            self._json_error(503, "Quote stream unavailable (websockets import failed)")
+            return
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache, no-transform")
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_header("Connection", "keep-alive")
+            self._send_cors_headers()
+            self.end_headers()
+            self.wfile.write(b": connected\n\n")
+            self.wfile.flush()
+            for ticker, price in iter_quote_stream(SUPPORTED_TICKERS, api_key):
+                payload = json.dumps({"ticker": ticker, "price": price})
+                self.wfile.write(f"data: {payload}\n\n".encode())
+                self.wfile.flush()
+        except Exception as exc:
+            logger.warning(f"SSE watchlist stream ended: {exc}")
 
     # POST -------------------------------------------------------------------
 

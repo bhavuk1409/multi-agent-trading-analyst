@@ -63,3 +63,32 @@ export async function fetchWatchlist(): Promise<WatchlistItem[]> {
     return [];
   }
 }
+
+// ---------------------------------------------------------------------------
+// Real-time tick stream (Server-Sent Events from /api/stream/watchlist)
+// ---------------------------------------------------------------------------
+
+/**
+ * Open a real-time tick stream for the watchlist. Returns a cleanup function
+ * that closes the EventSource.  ``onTick`` is called with ``(ticker, price)``
+ * for every trade Finnhub pushes.  The browser auto-reconnects on transient
+ * network errors; on Vercel the stream is naturally reaped at the 60 s
+ * function limit, which also triggers an auto-reconnect.
+ */
+export function connectWatchlistStream(
+  onTick: (ticker: Ticker, price: number) => void,
+  onStatus?: (status: 'open' | 'error') => void,
+): () => void {
+  const es = new EventSource(`${API_BASE}/stream/watchlist`);
+  es.onopen = () => onStatus?.('open');
+  es.onerror = () => onStatus?.('error');
+  es.onmessage = (e) => {
+    try {
+      const { ticker, price } = JSON.parse(e.data) as { ticker: Ticker; price: number };
+      onTick(ticker, price);
+    } catch {
+      /* ignore malformed event */
+    }
+  };
+  return () => es.close();
+}

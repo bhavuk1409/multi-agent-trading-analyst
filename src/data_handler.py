@@ -503,3 +503,72 @@ class DataHandler:
         except Exception as exc:
             logger.error(f"yfinance news fetch failed for {ticker}: {exc}")
             return []
+
+
+# ---------------------------------------------------------------------------
+# Real-time quote streaming — Finnhub WebSocket → async generator → sync wrapper
+# ---------------------------------------------------------------------------
+
+import asyncio
+import json as _json
+import threading
+
+try:
+    import websockets as _websockets
+    WEBSOCKETS_AVAILABLE = True
+except ImportError:
+    WEBSOCKETS_AVAILABLE = False
+
+
+async def aiter_quote_stream(tickers, api_key):
+    """Async generator yielding ``(ticker, price)`` tuples from the Finnhub
+    WebSocket.  Loops forever; the caller breaks out of the iteration to stop
+    the stream.  Lets exceptions propagate so Vercel's 60 s function reap can
+    naturally rotate the connection."""
+    url = f"wss://ws.finnhub.io?token={api_key}"
+    async with _websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
+        for t in tickers:
+            await ws.send(_json.dumps({"type": "subscribe", "symbol": t}))
+        async for msg in ws:
+            try:
+                payload = _json.loads(msg)
+            except Exception:
+                continue
+            for trade in payload.get("data", []) or []:
+                yield trade["s"], float(trade["p"])
+
+
+_STREAM_DONE = object()
+
+
+def iter_quote_stream(tickers, api_key):
+    """Sync wrapper that drives :func:`aiter_quote_stream` on a dedicated
+    background event loop, yielding ``(ticker, price)`` tuples into the
+    caller's thread (e.g. a BaseHTTPRequestHandler on the main thread)."""
+    import queue as _queue
+
+    q = _queue.Queue(maxsize=256)
+
+    def _runner():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            async def _pump():
+                async for ticker, price in aiter_quote_stream(tickers, api_key):
+                    # Marshalling across threads via run_in_executor keeps
+                    # the queue.put() off the event loop's hot path.
+                    await loop.run_in_executor(None, q.put, (ticker, price))
+            loop.run_until_complete(_pump())
+        except Exception as exc:
+            logger.warning(f"Quote stream ended: {exc}")
+        finally:
+            q.put(_STREAM_DONE)
+            loop.close()
+
+    threading.Thread(target=_runner, daemon=True).start()
+
+    while True:
+        item = q.get()
+        if item is _STREAM_DONE:
+            return
+        yield item
