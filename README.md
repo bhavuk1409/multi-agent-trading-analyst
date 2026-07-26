@@ -1,6 +1,17 @@
 # NEXUS — Multi-Agent LLM Trading Analyst
 
-> Four specialised AI agents — Technical, Fundamental, Sentiment, and Risk — analyse real market data in parallel and synthesise a final trading recommendation.
+Four specialised AI agents — **Technical**, **Fundamental**, **Sentiment**,
+and **Risk** — analyse real market data in parallel and synthesise a final
+trading recommendation with an entry price, stop loss, take-profit, and
+position size.
+
+![python](https://img.shields.io/badge/python-3.10-3776ab) ![frontend](https://img.shields.io/badge/frontend-React%2019%20%2B%20Vite-61dafb) ![backend](https://img.shields.io/badge/backend-stdlib%20http.server-3776ab) ![llm](https://img.shields.io/badge/LLM-Groq%20LLaMA%203.3%2070B-F55036) ![data](https://img.shields.io/badge/market%20data-yfinance-000000) ![deploy](https://img.shields.io/badge/deploy-Vercel-000000)
+
+### 🔴 Live demo
+
+| | URL |
+| --- | --- |
+| **App** | **https://multi-agent-trading-analyst.vercel.app** |
 
 ---
 
@@ -23,17 +34,31 @@
 ┌──────▼──────┐              ┌────────▼────────────┐
 │  yfinance   │              │  AdvancedMultiAgent  │
 │  (Yahoo     │              │  System              │
-│  Finance)   │              │  (LangChain + Groq)  │
-│  OHLCV data │              │                      │
-│  No key req.│              │  • Technical Agent   │
-└─────────────┘              │  • Fundamental Agent │
-                             │  • Sentiment Agent   │
-┌─────────────┐              │  • Risk Manager      │
-│  Exa API    │              │  • Coordinator       │
+│  Finance)   │              │  (Groq, direct       │
+│  OHLCV data │              │   OpenAI-SDK calls)  │
+│  No key req.│              │                      │
+└─────────────┘              │  • Technical Agent   │
+                             │  • Fundamental Agent │
+┌─────────────┐              │  • Sentiment Agent   │
+│  Exa API    │              │  • Risk Manager      │
 │  (optional) │──────────────►  (LLaMA 3.3 70B)    │
 │  Rich news  │              └─────────────────────-┘
 └─────────────┘
 ```
+
+On Vercel, `api/index.py` serves as the serverless entry point instead of
+`api_server.py` — same agent system and data handler underneath, just
+wrapped in a `BaseHTTPRequestHandler` subclass Vercel's Python runtime can
+invoke, with the agent system cached across warm invocations.
+
+**A deliberate design choice worth calling out:** the multi-agent system
+talks to Groq directly through the lightweight `openai` SDK (pointed at
+Groq's OpenAI-compatible endpoint) rather than through LangChain — the code
+comments explicitly frame this as cutting package weight for the Vercel
+serverless bundle. If you've seen other write-ups of this project mention
+LangChain, that's now out of date.
+
+---
 
 ## Data Sources
 
@@ -44,6 +69,10 @@
 | News (primary) | Exa neural search | ✅ Optional |
 | News (fallback) | Yahoo Finance headlines | ❌ Free |
 | LLM reasoning | Groq (LLaMA 3.3 70B) | ✅ Required |
+
+`data_handler.py` is explicit that it never fabricates data: if `yfinance`
+returns nothing for a ticker, it raises a `ValueError` instead of silently
+returning made-up numbers.
 
 ---
 
@@ -59,8 +88,8 @@
 ### 2. Clone & configure
 
 ```bash
-git clone https://github.com/your-username/nexus-trading-analyst.git
-cd nexus-trading-analyst
+git clone https://github.com/bhavuk1409/multi-agent-trading-analyst.git
+cd multi-agent-trading-analyst
 
 cp .env.example .env
 # Open .env and set GROQ_API_KEY (and optionally EXA_API_KEY)
@@ -102,17 +131,20 @@ Then open [http://localhost:5174](http://localhost:5174).
 ## Project Structure
 
 ```
-nexus-trading-analyst/
-├── api_server.py          # Python HTTP API server
-├── start.sh               # One-command startup script
-├── requirements.txt       # Python dependencies
+├── api_server.py          # Local Python HTTP API server
+├── api/index.py           # Vercel serverless entry point (same logic, packaged for prod)
+├── start.sh               # One-command local startup script
+├── requirements.txt       # Python dependencies (lean, Vercel-friendly)
 ├── constraints.txt        # pip resolver constraints
 ├── .env.example           # Environment variable template
 ├── config/
 │   └── config.yaml        # LLM model, agent weights
 ├── src/
-│   ├── data_handler.py    # yfinance + Exa data fetching
-│   └── multi_agent_system.py   # LangChain agent chains
+│   ├── data_handler.py    # yfinance + Exa data fetching, technical indicators
+│   └── multi_agent_system.py   # Direct Groq (openai SDK) agent calls
+├── tests/
+│   └── test_data_handler.py
+├── vercel.json            # Vercel build + rewrites config
 └── frontend/              # React + TypeScript UI
     ├── src/
     │   ├── App.tsx         # Main application
@@ -123,7 +155,9 @@ nexus-trading-analyst/
     │       ├── DecisionPanel.tsx
     │       ├── MarketReadout.tsx
     │       ├── NewsFeed.tsx
-    │       └── …
+    │       ├── NeuralOrb.tsx / AgentNeuralNet.tsx
+    │       ├── CompanySelect.tsx
+    │       └── Header.tsx
     ├── package.json
     └── vite.config.ts
 ```
@@ -152,7 +186,7 @@ agents:
 
 ### `GET /api/health`
 ```json
-{ "status": "ok", "agent_system": "ready", "tickers": ["AAPL","GOOGL","MSFT","TSLA","NVDA"] }
+{ "status": "ok", "tickers": ["AAPL","GOOGL","MSFT","TSLA","NVDA"] }
 ```
 
 ### `GET /api/watchlist`
@@ -195,6 +229,10 @@ Returns live quotes for all 5 tickers from Yahoo Finance.
 }
 ```
 
+The Vercel deployment (`api/index.py`) exposes the same three endpoints,
+also reachable without the `/api` prefix (`/health`, `/watchlist`,
+`/analyze`).
+
 ---
 
 ## Supported Tickers
@@ -209,14 +247,26 @@ Returns live quotes for all 5 tickers from Yahoo Finance.
 
 ---
 
+## Testing
+
+```bash
+pytest tests/
+```
+
+`tests/test_data_handler.py` covers the yfinance data-fetching and
+technical-indicator logic in `src/data_handler.py`.
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18 + TypeScript + Vite |
+| Frontend | React 19 + TypeScript + Vite 8 |
 | Animations | Framer Motion |
-| Backend | Python 3 stdlib `http.server` (no framework) |
-| LLM | Groq API (LLaMA 3.3 70B via LangChain) |
+| Backend (local) | Python 3 stdlib `http.server` (no framework) |
+| Backend (Vercel) | `api/index.py`, same handler pattern, serverless |
+| LLM | Groq API (LLaMA 3.3 70B) via the `openai` SDK directly — no LangChain |
 | Market Data | yfinance (Yahoo Finance) |
 | News Search | Exa API (optional) |
 
