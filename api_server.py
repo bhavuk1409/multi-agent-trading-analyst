@@ -113,7 +113,10 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self._send_cors_headers()
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _json_error(self, status: int, message: str):
         body = json.dumps({"error": message}).encode()
@@ -121,7 +124,10 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self._send_cors_headers()
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     # GET --------------------------------------------------------------------
 
@@ -157,9 +163,16 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
             )
             quotes = [handler.fetch_live_quote(t) for t in SUPPORTED_TICKERS]
             self._json_ok({"quotes": quotes})
+        except (BrokenPipeError, ConnectionResetError):
+            # Client disconnected before we finished sending — expected during
+            # EventSource reconnect churn. Silenced.
+            pass
         except Exception as exc:
             logger.exception("Watchlist fetch failed")
-            self._json_error(500, str(exc))
+            try:
+                self._json_error(500, str(exc))
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
     def _handle_sse_watchlist(self):
         """Stream per-tick prices as Server-Sent Events from Finnhub.
@@ -188,6 +201,9 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
                 payload = json.dumps({"ticker": ticker, "price": price})
                 self.wfile.write(f"data: {payload}\n\n".encode())
                 self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            # Browser closed the EventSource — normal during reconnect churn.
+            pass
         except Exception as exc:
             logger.warning(f"SSE watchlist stream ended: {exc}")
 
