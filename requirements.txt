@@ -1,21 +1,17 @@
-# NEXUS — Multi-Agent Trading Analyst: Python dependencies
-# =========================================================
+# NEXUS — Multi-Agent Trading Analyst: Lightweight Python dependencies for Vercel
+# ==============================================================================
 
-# Market data
+# Market data (Yahoo Finance)
 yfinance>=0.2.28
 
-# Data processing
+# Data processing & utilities
 numpy>=1.24.0
 pandas>=2.0.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
 
-# LLM & Multi-Agent (Groq + LangChain)
-pydantic>=2.0.0
-langchain>=0.1.0
-langchain-openai>=0.0.5
-langchain-core>=0.3.0
+# LLM & Multi-Agent (Groq OpenAI-compatible endpoint) — lightweight <15MB
 openai>=1.0.0
 
-# News search (optional)
+# News search (optional — falls back to yfinance headlines)
 exa-py>=1.15.6
