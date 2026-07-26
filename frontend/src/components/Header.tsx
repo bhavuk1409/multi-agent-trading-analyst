@@ -14,17 +14,30 @@ export function Header({ apiUp }: HeaderProps) {
         <div className="nexus-brand">
           <div className="nexus-brand__row">
             <div className="nexus-logo" aria-hidden="true">
-              <svg width="22" height="22" viewBox="0 0 44 44" fill="none">
+              <svg width="24" height="24" viewBox="0 0 44 44" fill="none">
                 <polygon
                   points="22,3.5 39,13.3 39,33 22,42.8 5,33 5,13.3"
                   stroke="url(#hex-grad)"
-                  strokeWidth="3"
+                  strokeWidth="3.2"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+                <polygon
+                  points="22,9.5 33.5,16.1 33.5,29.9 22,36.5 10.5,29.9 10.5,16.1"
+                  stroke="url(#hex-grad-inner)"
+                  strokeWidth="1.8"
+                  strokeOpacity="0.45"
+                  strokeLinejoin="round"
                   fill="none"
                 />
                 <defs>
-                  <linearGradient id="hex-grad" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+                  <linearGradient id="hex-grad" x1="5" y1="3.5" x2="39" y2="42.8" gradientUnits="userSpaceOnUse">
                     <stop offset="0%" stopColor="#ffffff" />
                     <stop offset="100%" stopColor="#3a3a3a" />
+                  </linearGradient>
+                  <linearGradient id="hex-grad-inner" x1="10.5" y1="9.5" x2="33.5" y2="36.5" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#ffffff" />
+                    <stop offset="100%" stopColor="#444444" />
                   </linearGradient>
                 </defs>
               </svg>
