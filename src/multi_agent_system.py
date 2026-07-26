@@ -7,12 +7,36 @@ import os
 from typing import Dict, List, Any
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+import json
+import re
+from langchain_core.output_parsers import BaseOutputParser
 from pydantic import BaseModel, Field
 import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class RobustJsonOutputParser(BaseOutputParser):
+    """Robust JSON parser that extracts JSON content even if the LLM includes preamble or markdown."""
+    def parse(self, text: Any) -> Any:
+        if isinstance(text, dict):
+            return text
+        text_str = str(text).strip()
+        try:
+            # Strip markdown codeblock if present
+            if text_str.startswith("```"):
+                text_str = re.sub(r"^```(?:json)?", "", text_str)
+                text_str = re.sub(r"```$", "", text_str).strip()
+            
+            # Extract json object using regex
+            match = re.search(r'\{.*\}', text_str, re.DOTALL)
+            if match:
+                text_str = match.group(0)
+            
+            return json.loads(text_str)
+        except Exception as e:
+            logger.warning(f"Failed to parse JSON output: {e}. Output text: {text_str[:200]}")
+            raise
 
 
 # Pydantic schemas for structured output
@@ -91,7 +115,7 @@ class AdvancedMultiAgentSystem:
             ("system", """You are a technical analyst specializing in chart patterns and indicators.
 Analyze the technical data and provide a structured recommendation.
 
-Return your analysis as JSON with this exact structure:
+Return ONLY a raw JSON object with no markdown formatting or intro text:
 {{
     "recommendation": "buy|sell|hold",
     "confidence": <0-100>,
@@ -111,7 +135,7 @@ Provide your technical analysis.""")
             ("system", """You are a fundamental analyst specializing in company valuation and market conditions.
 Analyze the fundamental data and provide a structured recommendation.
 
-Return your analysis as JSON with this exact structure:
+Return ONLY a raw JSON object with no markdown formatting or intro text:
 {{
     "recommendation": "buy|sell|hold",
     "confidence": <0-100>,
@@ -131,7 +155,7 @@ Provide your fundamental analysis.""")
             ("system", """You are a sentiment analyst specializing in news and market sentiment.
 Analyze the news sentiment and provide a structured recommendation.
 
-Return your analysis as JSON with this exact structure:
+Return ONLY a raw JSON object with no markdown formatting or intro text:
 {{
     "recommendation": "buy|sell|hold",
     "confidence": <0-100>,
@@ -151,7 +175,7 @@ Provide your sentiment analysis.""")
             ("system", """You are a risk manager specializing in portfolio risk assessment.
 Analyze the risk factors and provide a structured recommendation.
 
-Return your analysis as JSON with this exact structure:
+Return ONLY a raw JSON object with no markdown formatting or intro text:
 {{
     "recommendation": "buy|sell|hold",
     "confidence": <0-100>,
@@ -171,7 +195,7 @@ Assess the risk and provide your recommendation.""")
             ("system", """You are the head trader coordinating all analyst recommendations.
 Synthesize the agent analyses into a final trading decision with specific parameters.
 
-Return your decision as JSON with this exact structure:
+Return ONLY a raw JSON object with no markdown formatting or intro text:
 {{
     "action": "buy|sell|hold",
     "position_size": <0.0-1.0>,
@@ -194,8 +218,8 @@ Provide your final coordinated decision.""")
         ])
         
         # Setup parsers
-        self.agent_parser = JsonOutputParser(pydantic_object=AgentAnalysis)
-        self.decision_parser = JsonOutputParser(pydantic_object=FinalDecision)
+        self.agent_parser = RobustJsonOutputParser()
+        self.decision_parser = RobustJsonOutputParser()
     
     def analyze(
         self,

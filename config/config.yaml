@@ -1,26 +1,31 @@
-# Simplified Trading Configuration
+# NEXUS — Multi-Agent Trading Analyst: Configuration
+# =====================================================
+# All date ranges are overridden at runtime by api_server.py (uses today's date).
+# Edit this file to change the LLM model or agent weights.
 
-# Data Settings
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
 data:
-  tickers: ["AAPL", "GOOGL", "MSFT"]
-  start_date: "2022-01-01"
-  end_date: "2024-01-01"
-  test_split: 0.2
+  tickers: ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA"]
+  history_days: 90          # calendar days of OHLCV to fetch per analysis request
 
-# Trading Environment
-trading:
-  initial_capital: 100000
-  commission: 0.001
-  slippage: 0.0005
-  max_position: 0.3 # 30% max per stock
-
-# LLM Settings (Groq)
+# ---------------------------------------------------------------------------
+# LLM  (Groq — https://console.groq.com)
+# ---------------------------------------------------------------------------
 llm:
-  model: "llama-3.3-70b-versatile"  # Options: llama-3.3-70b-versatile, llama-3.1-70b-versatile, gemma2-9b-it
+  # Available models on Groq (as of mid-2026):
+  #   llama-3.3-70b-versatile   ← recommended (default)
+  #   llama-3.1-70b-versatile
+  #   llama3-70b-8192
+  #   gemma2-9b-it
+  model: "llama-3.3-70b-versatile"
   temperature: 0.7
   max_tokens: 2000
 
-# Multi-Agent Configuration
+# ---------------------------------------------------------------------------
+# Multi-Agent weights  (must sum to 1.0)
+# ---------------------------------------------------------------------------
 agents:
   technical_analyst:
     enabled: true
@@ -34,9 +39,3 @@ agents:
   risk_manager:
     enabled: true
     weight: 0.25
-
-# Training
-training:
-  algorithm: "ppo"
-  timesteps: 100000
-  eval_freq: 10000
