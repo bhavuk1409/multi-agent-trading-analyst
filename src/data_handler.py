@@ -424,7 +424,7 @@ class DataHandler:
                 type="neural",
                 num_results=10,
                 start_published_date=start_dt.strftime("%Y-%m-%d"),
-                text=True,
+                contents={"text": {"max_characters": 300}},
             )
 
             articles = []
