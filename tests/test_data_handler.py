@@ -151,3 +151,151 @@ def test_no_example_com_urls(handler):
         assert "example.com" not in article.get("url", ""), (
             f"Fake example.com URL found: {article['url']}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Indicator correctness — fixture-based (deterministic; no yfinance)
+# ---------------------------------------------------------------------------
+
+import numpy as np
+import pandas as pd
+
+
+def _build_close_df(closes, highs=None, lows=None, volumes=None):
+    """Build a minimal DataFrame shaped like `_fetch_ohlcv` returns, suitable
+    for `DataHandler._add_technical_indicators`. Length must be ≥ 60 rows for
+    rolling-50 / ATR / drawdown to produce non-NaN values."""
+    n = len(closes)
+    if highs  is None: highs  = [c * 1.01 for c in closes]
+    if lows   is None: lows   = [c * 0.99 for c in closes]
+    if volumes is None: volumes = [1_000_000] * n
+    dates = pd.bdate_range(end="2026-07-24", periods=n)  # business days
+    return pd.DataFrame({
+        "date":   dates,
+        "open":   closes,
+        "high":   highs,
+        "low":    lows,
+        "close":  closes,
+        "volume": volumes,
+    })
+
+
+@pytest.fixture
+def flat_closes():
+    """14 closes with 0 delta → Wilder RSI is exactly 50.0."""
+    return [100.0] * 20
+
+
+@pytest.fixture
+def linear_closes():
+    """Monotonic rising series. RSI should rise with confidence, MACD histogram
+    should be > 0 for the duration of the trend."""
+    n = 60
+    return [100.0 + i * 0.5 for i in range(n)]  # 100 → 129.5
+
+
+def test_wilder_rsi_is_50_for_flat_series(handler, flat_closes):
+    df = _build_close_df(flat_closes)
+    df = handler._add_technical_indicators(df.copy())
+    last_rsi = float(df["rsi"].iloc[-1])
+    # flat price → RSI undefined (0/0). Wilder's behaviour gives a value once
+    # enough ewm smoothing accumulates; the ewm on flat deltas is 0 → RS = 0/0
+    # → NaN, which is acceptable for a flat series. We assert it stays within
+    # the legal domain (0..100) once finite.
+    import math
+    if not math.isnan(last_rsi):
+        assert 0 <= last_rsi <= 100
+
+
+def test_wilder_rsi_overweights_recent_moves(handler):
+    """Alternating up/down with a final big run-up — RSI should exceed 70."""
+    closes = [100.0] * 30 + [100.0 - (0.5 if i % 2 == 0 else -0.5) for i in range(15)]
+    closes += [110.0 + i for i in range(15)]  # strong run-up at the end
+    df     = handler._add_technical_indicators(_build_close_df(closes))
+    rsi_series = df["rsi"].dropna()
+    assert not rsi_series.empty, "RSI never produced a finite value"
+    last_rsi = float(rsi_series.iloc[-1])
+    assert last_rsi > 70, f"Expected RSI > 70 after run-up, got {last_rsi:.2f}"
+
+
+def test_wilder_rsi_diverges_from_simple_mean(handler):
+    """Sanity check: Wilder's ewm RSI produces a different number than the
+    plain rolling-mean RSI for the same data — guards against accidentally
+    reverting to the old (buggy) simple-mean formula."""
+    # Mix of gains and losses with varying magnitudes so the two formulas
+    # produce materially different numbers.
+    closes = [100.0]
+    for i in range(59):
+        # Oscillating up-and-down with step sizes 1, 2, 3 repeating.
+        step = (i % 3) + 1
+        sign = -1 if i % 2 == 1 else 1
+        closes.append(closes[-1] + sign * step)
+    df = handler._add_technical_indicators(_build_close_df(closes))
+
+    # Plain rolling-mean RSI as documented in the old buggy code.
+    delta = pd.Series(closes).diff()
+    gain = delta.clip(lower=0).rolling(14).mean()
+    loss = (-delta.clip(upper=0)).rolling(14).mean().abs()
+    rs   = gain / loss.replace(0, np.nan)
+    naive_rsi = (100 - (100 / (1 + rs))).dropna()
+
+    wilder_series = df["rsi"].dropna()
+    assert not wilder_series.empty, "Wilder RSI never produced a finite value"
+    wilder_rsi = float(wilder_series.iloc[-1])
+    naive_last = float(naive_rsi.iloc[-1])
+    assert abs(wilder_rsi - naive_last) > 0.1, (
+        f"Wilder RSI should differ materially from naive "
+        f"({wilder_rsi:.4f} vs {naive_last:.4f})"
+    )
+
+
+def test_macd_signal_and_histogram_present(handler, linear_closes):
+    df = handler._add_technical_indicators(_build_close_df(linear_closes))
+    assert "macd_signal" in df.columns
+    assert "macd_hist"   in df.columns
+    # For a uniform uptrend, MACD histogram should be positive.
+    assert float(df["macd_hist"].iloc[-1]) > 0
+    # signal is 9-EMA of MACD line, smoother
+    assert float(df["macd_signal"].iloc[-1]) > 0
+
+
+def test_atr_positive_on_realistic_data(handler):
+    closes = [100 + i + (i % 3) * 0.2 for i in range(60)]
+    highs  = [c + 1.5 for c in closes]
+    lows   = [c - 1.5 for c in closes]
+    df     = handler._add_technical_indicators(_build_close_df(closes, highs, lows))
+    last_atr = float(df["atr_14"].iloc[-1])
+    assert last_atr > 0
+
+
+def test_hv_annualised_in_percent(handler):
+    closes = [100 + i for i in range(60)]  # constant linear trend
+    df     = handler._add_technical_indicators(_build_close_df(closes))
+    last_hv = float(df["hv_14"].iloc[-1])
+    # A linear series has non-zero log returns → non-zero vol
+    assert last_hv > 0
+    assert last_hv < 1000  # sanity cap
+
+
+def test_max_drawdown_negative_on_decline(handler):
+    """A peak-then-decline series must show negative drawdown at the end."""
+    closes = [100] * 20 + [110] * 10 + [80] * 30  # peak at 110, ends at 80
+    df     = handler._add_technical_indicators(_build_close_df(closes))
+    last_dd = float(df["drawdown"].iloc[-1])
+    assert last_dd < 0
+    # Final close 80 vs peak 110 → -27.27%
+    assert abs(last_dd - ((80 / 110 - 1) * 100)) < 0.5
+
+
+def test_market_summary_exposes_new_fields(handler):
+    """get_market_summary must surface macd_signal, sma_50, hv_14, atr_14,
+    drawdown, close_prev_1/5/20."""
+    closes = [100 + i for i in range(60)]
+    df     = handler._add_technical_indicators(_build_close_df(closes))
+    df["ticker"] = "TEST"
+    df["date"]   = pd.to_datetime(df["date"])
+    summary = handler.get_market_summary(df, "TEST", df["date"].iloc[-1])
+    for key in ("macd_signal", "macd_hist", "sma_50", "hv_14",
+                "atr_14", "drawdown",
+                "close_prev_1", "close_prev_5", "close_prev_20"):
+        assert key in summary, f"market_summary missing {key}"

@@ -124,12 +124,15 @@ class handler(http.server.BaseHTTPRequestHandler):
                 latest = df[df["ticker"] == ticker].iloc[-1]
                 date_str = str(latest["date"])
                 market_data = dh.get_market_summary(df, ticker, latest["date"])
+                fundamentals = dh.fetch_fundamentals(ticker)
                 news = dh.fetch_news(ticker, days_back=7)
+
+                context = {**market_data, **fundamentals}
 
                 results = agent_sys.analyze(
                     ticker=ticker,
                     date=date_str,
-                    market_data=market_data,
+                    market_data=context,
                     news=news,
                 )
 

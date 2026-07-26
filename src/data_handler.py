@@ -12,7 +12,7 @@ than silently returning fabricated numbers.
 
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -133,16 +133,77 @@ class DataHandler:
             raise ValueError(f"No data found for {ticker} near {date}")
 
         r = row_df.iloc[0]
+        # Multi-day closes (1/5/20 trading days back) so agents can detect
+        # SMA crossovers and trend changes — keyed off the most recent rows.
+        ticker_history = df[df["ticker"] == ticker].sort_values("date")
+        closes = ticker_history["close"].tolist()
+        n      = len(closes)
+
+        def _prev(k: int):
+            return float(closes[-1 - k]) if n > k else float(r["close"])
+
+        def _opt(key: str, default):
+            v = r.get(key)
+            return float(v) if pd.notna(v) else default
+
         return {
-            "close":        float(r["close"]),
-            "volume":       int(r["volume"]),
-            "rsi":          float(r["rsi"])          if pd.notna(r["rsi"])          else 50.0,
-            "macd":         float(r["macd"])         if pd.notna(r["macd"])         else 0.0,
-            "sma_20":       float(r["sma_20"])       if pd.notna(r["sma_20"])       else float(r["close"]),
-            "bb_position":  float(r["bb_position"])  if pd.notna(r["bb_position"])  else 0.5,
-            "volume_ratio": float(r["volume_ratio"]) if pd.notna(r["volume_ratio"]) else 1.0,
-            "momentum":     float(r["momentum"])     if pd.notna(r["momentum"])     else 0.0,
+            "close":         float(r["close"]),
+            "volume":        int(r["volume"]),
+            "rsi":           _opt("rsi",          50.0),
+            "macd":          _opt("macd",          0.0),
+            "macd_signal":   _opt("macd_signal",   0.0),
+            "macd_hist":     _opt("macd_hist",     0.0),
+            "sma_20":        _opt("sma_20",       float(r["close"])),
+            "sma_50":        _opt("sma_50",       float(r["close"])),
+            "bb_position":   _opt("bb_position",   0.5),
+            "bb_upper":      _opt("bb_upper",     float(r["close"]) * 1.05),
+            "bb_lower":      _opt("bb_lower",     float(r["close"]) * 0.95),
+            "volume_ratio":  _opt("volume_ratio",  1.0),
+            "momentum":      _opt("momentum",      0.0),
+            "hv_14":         _opt("hv_14",        20.0),
+            "atr_14":        _opt("atr_14",        1.0),
+            "drawdown":      _opt("drawdown",      0.0),
+            "close_prev_1":  _prev(1),
+            "close_prev_5":  _prev(5),
+            "close_prev_20": _prev(20),
         }
+
+    def fetch_fundamentals(self, ticker: str) -> Dict[str, Any]:
+        """
+        Pull free fundamentals from yfinance's `.info` endpoint.
+
+        No API key required. The endpoint is rate-limited but free; on failure
+        the method returns an empty dict rather than raising — fundamentals are
+        advisory and a missing sector / P/E should not abort the analysis.
+        """
+        try:
+            logger.info(f"  Fetching fundamentals for {ticker} via yfinance .info …")
+            info = yf.Ticker(ticker).info or {}
+
+            def _num(key: str):
+                v = info.get(key)
+                return v if v is not None else None
+
+            return {
+                "market_cap":        _num("marketCap"),
+                "pe_trailing":       _num("trailingPE"),
+                "pe_forward":        _num("forwardPE"),
+                "eps_trailing":      _num("trailingEps"),
+                "eps_forward":       _num("forwardEps"),
+                "dividend_yield":    _num("dividendYield"),
+                "sector":            info.get("sector"),
+                "industry":          info.get("industry"),
+                "52w_high":          _num("fiftyTwoWeekHigh"),
+                "52w_low":           _num("fiftyTwoWeekLow"),
+                "beta":              _num("beta"),
+                "short_pct":         _num("shortPercentOfFloat"),
+                "target_mean_price": _num("targetMeanPrice"),
+                "target_high_price": _num("targetHighPrice"),
+                "target_low_price":  _num("targetLowPrice"),
+            }
+        except Exception as exc:
+            logger.warning(f"Fundamentals fetch failed for {ticker}: {exc}")
+            return {}
 
     def fetch_news(self, ticker: str, days_back: int = 7) -> List[Dict]:
         """
@@ -159,7 +220,7 @@ class DataHandler:
                 return news
             logger.warning("Exa returned no news — falling back to yfinance news.")
 
-        return self._fetch_news_yfinance(ticker)
+        return self._fetch_news_yfinance(ticker, days_back=days_back)
 
     def fetch_live_quote(self, ticker: str) -> Dict:
         """
@@ -244,20 +305,35 @@ class DataHandler:
     # ------------------------------------------------------------------
 
     def _add_technical_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Compute and append standard technical indicators in-place."""
+        """Compute and append standard technical indicators in-place.
+
+        Notes on formulas:
+        - RSI uses Wilder's exponential smoothing (alpha = 1/14), which matches
+          TradingView / Bloomberg. A simple rolling mean was previously used
+          which is mathematically valid but produces materially different values.
+        - MACD computes the line, the 9-period signal line, and the histogram.
+        - ATR uses True Range (max of HL, |H-Cprev|, |L-Cprev|) then a 14-period
+          Wilder-smoothed mean.
+        - Historical volatility is the 14-day rolling std of daily log returns,
+          annualised by √252 and expressed in percent.
+        - Max drawdown is the running percent distance from the running peak
+          across the entire history (60d-context aware via the cummax).
+        """
         close = df["close"]
 
-        # RSI (14-period)
+        # RSI (14-period, Wilder's smoothing)
         delta = close.diff()
-        gain  = delta.clip(lower=0).rolling(14).mean()
-        loss  = (-delta.clip(upper=0)).rolling(14).mean()
+        gain  = delta.clip(lower=0).ewm(alpha=1/14, adjust=False).mean()
+        loss  = (-delta.clip(upper=0)).ewm(alpha=1/14, adjust=False).mean().abs()
         rs    = gain / loss.replace(0, np.nan)
         df["rsi"] = 100 - (100 / (1 + rs))
 
-        # MACD (12/26 EMA diff)
-        ema12       = close.ewm(span=12, adjust=False).mean()
-        ema26       = close.ewm(span=26, adjust=False).mean()
-        df["macd"]  = ema12 - ema26
+        # MACD (12/26 EMA diff) + 9-period signal line + histogram
+        ema12            = close.ewm(span=12, adjust=False).mean()
+        ema26            = close.ewm(span=26, adjust=False).mean()
+        df["macd"]       = ema12 - ema26
+        df["macd_signal"] = df["macd"].ewm(span=9, adjust=False).mean()
+        df["macd_hist"]   = df["macd"] - df["macd_signal"]
 
         # Simple moving averages
         df["sma_20"] = close.rolling(20).mean()
@@ -275,8 +351,24 @@ class DataHandler:
         df["volume_sma"]   = df["volume"].rolling(20).mean()
         df["volume_ratio"] = df["volume"] / df["volume_sma"].replace(0, np.nan)
 
-        # Momentum (10-day price difference)
-        df["momentum"] = close - close.shift(10)
+        # Momentum (10-day percent change — relative, not absolute, so it scales
+        # meaningfully across price levels).
+        df["momentum"] = close.pct_change(10) * 100
+
+        # 14-day annualised historical volatility (log-returns, √252 scaling).
+        log_ret       = np.log(df["close"] / df["close"].shift(1))
+        df["hv_14"]   = log_ret.rolling(14).std() * np.sqrt(252) * 100
+
+        # 14-day Average True Range (Wilder smoothing).
+        tr = pd.concat([
+            df["high"] - df["low"],
+            (df["high"] - df["close"].shift(1)).abs(),
+            (df["low"]  - df["close"].shift(1)).abs(),
+        ], axis=1).max(axis=1)
+        df["atr_14"] = tr.ewm(alpha=1/14, adjust=False).mean()
+
+        # Trailing max drawdown (percent from running peak across full history).
+        df["drawdown"] = (df["close"] / df["close"].cummax() - 1) * 100
 
         return df
 
@@ -317,13 +409,18 @@ class DataHandler:
             logger.error(f"Exa news fetch failed for {ticker}: {exc}")
             return []
 
-    def _fetch_news_yfinance(self, ticker: str) -> List[Dict]:
-        """Fetch news headlines directly from Yahoo Finance — no API key needed."""
+    def _fetch_news_yfinance(self, ticker: str, days_back: int = 7) -> List[Dict]:
+        """Fetch news headlines directly from Yahoo Finance — no API key needed.
+
+        `days_back` filters articles to the past N days so the sentiment agent
+        isn't fed stale headlines. Articles with no usable timestamp are kept.
+        """
         try:
             logger.info(f"  Fetching news for {ticker} via yfinance …")
             t        = yf.Ticker(ticker)
             raw_news = t.news or []
-            today    = datetime.now().strftime("%Y-%m-%d")
+            today    = datetime.now()
+            cutoff   = today - timedelta(days=days_back)
 
             articles = []
             for item in raw_news[:10]:
@@ -335,11 +432,15 @@ class DataHandler:
                 )
                 pub_ts  = content.get("pubDate") or item.get("providerPublishTime")
                 if isinstance(pub_ts, (int, float)):
-                    pub_date = datetime.utcfromtimestamp(pub_ts).strftime("%Y-%m-%d")
+                    pub_dt   = datetime.fromtimestamp(pub_ts, tz=timezone.utc)
+                    pub_date = pub_dt.strftime("%Y-%m-%d")
+                    # Drop items outside the [cutoff, today] window.
+                    if pub_dt.replace(tzinfo=None) < cutoff:
+                        continue
                 elif isinstance(pub_ts, str):
                     pub_date = pub_ts[:10]
                 else:
-                    pub_date = today
+                    pub_date = today.strftime("%Y-%m-%d")
 
                 summary = (
                     content.get("summary")
@@ -360,7 +461,7 @@ class DataHandler:
                     "sentiment":      "neutral",
                 })
 
-            logger.info(f"  ✓ yfinance: {len(articles)} articles for {ticker}")
+            logger.info(f"  ✓ yfinance: {len(articles)} articles for {ticker} (≤{days_back}d)")
             return articles
 
         except Exception as exc:

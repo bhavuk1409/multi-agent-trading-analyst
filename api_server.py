@@ -199,13 +199,18 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
             latest     = df[df["ticker"] == ticker].iloc[-1]
             date_str   = str(latest["date"])
             market_data = handler.get_market_summary(df, ticker, latest["date"])
+            fundamentals = handler.fetch_fundamentals(ticker)
             news        = handler.fetch_news(ticker, days_back=7)
+
+            # Merge fundamentals into the context dict so the Fundamental agent
+            # actually receives PE / sector / market-cap instead of inventing them.
+            context = {**market_data, **fundamentals}
 
             # Run all 4 agents + coordinator
             results = _agent_system.analyze(
                 ticker=ticker,
                 date=date_str,
-                market_data=market_data,
+                market_data=context,
                 news=news,
             )
 
