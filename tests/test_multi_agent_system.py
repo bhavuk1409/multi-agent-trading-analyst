@@ -83,10 +83,10 @@ def test_result_shape_unchanged(system):
     )
     assert set(r.keys()) == {
         "technical_analysis", "fundamental_analysis",
-        "sentiment_analysis", "risk_analysis", "final_decision",
+        "sentiment_analysis", "risk_analysis", "rl_analysis", "final_decision",
     }
     for k in ("technical_analysis", "fundamental_analysis",
-              "sentiment_analysis", "risk_analysis"):
+              "sentiment_analysis", "risk_analysis", "rl_analysis"):
         assert set(r[k].keys()) >= {"recommendation", "confidence", "reasoning"}, k
     assert set(r["final_decision"].keys()) >= {
         "action", "position_size", "confidence", "conviction",
@@ -127,6 +127,7 @@ def test_weights_visible_in_coordinator_prompt(system):
             "fundamental_analyst": {"enabled": False, "weight": 0.0},
             "sentiment_analyst":   {"enabled": False, "weight": 0.0},
             "risk_manager":        {"enabled": False, "weight": 0.0},
+            "rl_trader":           {"enabled": False, "weight": 0.0},
         },
     )
     one_agent.analyze(
@@ -143,6 +144,7 @@ def test_weights_visible_in_coordinator_prompt(system):
             "fundamental_analysis": one_agent._default_analysis(),
             "sentiment_analysis":   one_agent._default_analysis(),
             "risk_analysis":        one_agent._default_analysis(),
+            "rl_analysis":          one_agent._default_analysis(),
         },
         include_weights=True,
     )
@@ -152,6 +154,7 @@ def test_weights_visible_in_coordinator_prompt(system):
     assert "Fundamental Analysis  [weight=0.00]" in formatted
     assert "Sentiment Analysis  [weight=0.00]" in formatted
     assert "Risk Analysis  [weight=0.00]" in formatted
+    assert "Rl Analysis  [weight=0.00]" in formatted
 
 
 def test_weights_normalised_to_sum_to_one():
@@ -161,10 +164,11 @@ def test_weights_normalised_to_sum_to_one():
         model="llama-3.3-70b-versatile",
         temperature=0.0,
         agent_config={
-            "technical_analyst":   {"enabled": True, "weight": 2.0},   # sum = 4.0
+            "technical_analyst":   {"enabled": True, "weight": 2.0},   # sum = 5.0
             "fundamental_analyst": {"enabled": True, "weight": 0.5},
             "sentiment_analyst":   {"enabled": True, "weight": 1.0},
             "risk_manager":        {"enabled": True, "weight": 0.5},
+            "rl_trader":           {"enabled": True, "weight": 1.0},
         },
     )
     formatted = s._format_agent_results(
@@ -173,11 +177,12 @@ def test_weights_normalised_to_sum_to_one():
             "fundamental_analysis": {"recommendation": "hold", "confidence": 50, "reasoning": "ok"},
             "sentiment_analysis":   {"recommendation": "sell", "confidence": 40, "reasoning": "ok"},
             "risk_analysis":        {"recommendation": "hold", "confidence": 60, "reasoning": "ok"},
+            "rl_analysis":          {"recommendation": "buy",  "confidence": 70, "reasoning": "ok"},
         },
         include_weights=True,
     )
-    # Renormalised values: 2.0/4.0=0.50, 0.5/4.0=0.12, 1.0/4.0=0.25, 0.5/4.0=0.12.
+    # Renormalised values: 2.0/5.0=0.40, 0.5/5.0=0.10, 1.0/5.0=0.20, 0.5/5.0=0.10, 1.0/5.0=0.20.
     # Verify the literal annotations appear with two-decimal precision.
-    assert "[weight=0.50]" in formatted
-    assert "[weight=0.12]" in formatted
-    assert "[weight=0.25]" in formatted
+    assert "[weight=0.40]" in formatted
+    assert "[weight=0.10]" in formatted
+    assert "[weight=0.20]" in formatted

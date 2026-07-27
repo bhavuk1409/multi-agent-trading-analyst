@@ -38,10 +38,10 @@ logger = logging.getLogger(__name__)
 # Shared normalisation — build_obs_vector and OBS_DIM from rl_env.py
 # ---------------------------------------------------------------------------
 try:
-    from rl_env import build_obs_vector, OBS_DIM
+    from rl_features import build_obs_vector, OBS_DIM
     _RL_ENV_AVAILABLE = True
 except ImportError as _e:
-    logger.warning("rl_env not importable: %s — RLTraderAgent will degrade.", _e)
+    logger.warning("rl_features not importable: %s — RLTraderAgent will degrade.", _e)
     _RL_ENV_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
