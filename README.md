@@ -16,7 +16,6 @@
 
 ## Table of Contents
 - [Overview](#overview)
-- [What's New in v2](#whats-new-in-v2)
 - [System Architecture](#system-architecture)
 - [Agent Weights & Rules](#agent-weights--rules)
 - [Data Sources & Indicators](#data-sources--indicators)
@@ -37,22 +36,13 @@
 4. **Risk Manager (LLM)**
 5. **Quant Model (PPO RL)**
 
-## What's New in v2
 
-The original four-agent LLM system has been extended with a **fifth agent: the Quant Model**, a PPO reinforcement-learning policy trained on 4+ years of historical OHLCV data.
-
-| Feature | v1 (Legacy) | v2 (Current) |
-|---|---|---|
-| **Agents** | 4 × LLM | 4 × LLM + 1 × RL policy |
-| **RL Inference** | — | Pure numpy (<1 ms, no torch at runtime) |
-| **Coordinator** | Equal 0.25 weights | Tuned fractional weights |
-| **Deployment Footprint** | ~15 MB | ~15 MB (RL adds 0 MB — relies entirely on NumPy) |
-
-> **Key Design Decision:** The RL policy weights are exported to a lightweight 21 KB `.npz` file (`models/rl_policy_weights.npz`). Inference uses a pure-numpy forward pass, meaning `torch` and `stable-baselines3` are **not imported at runtime**, keeping the Vercel serverless bundle extremely lean.
 
 ---
 
 ## System Architecture
+
+> **Key Design Decision:** The RL policy weights are exported to a lightweight 21 KB `.npz` file (`models/rl_policy_weights.npz`). Inference uses a pure-numpy forward pass, meaning `torch` and `stable-baselines3` are **not imported at runtime**, keeping the Vercel serverless bundle extremely lean.
 
 ```mermaid
 flowchart TB
