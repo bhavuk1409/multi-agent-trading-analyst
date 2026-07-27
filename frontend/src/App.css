@@ -812,12 +812,8 @@
 
 .agent-cards-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));   /* 4 specialists in one row */
-  gap: 12px;
-}
-@media (max-width: 1280px) {
-  /* 2 x 2 on medium screens — still keeps every card on screen without scrolling */
-  .agent-cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
 }
 @media (max-width: 800px) {
   .agent-cards-grid { grid-template-columns: 1fr; }
@@ -835,7 +831,6 @@
   border-radius: var(--radius-sm);
   transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   backdrop-filter: blur(12px) saturate(140%);
-  min-width: 0;     /* allow content to shrink inside 4-col grid */
 }
 
 .agent-card:hover {
