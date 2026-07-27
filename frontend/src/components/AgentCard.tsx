@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import type { AgentAnalysis, AgentState } from '../types';
-import { IconTechnical, IconFundamental, IconSentiment, IconRisk } from './Icons';
+import { IconTechnical, IconFundamental, IconSentiment, IconRisk, IconRL } from './Icons';
 import { HelpTip } from './HelpTip';
 import { HELP_TEXT } from '../helpText';
 
@@ -11,17 +11,28 @@ interface AgentCardProps {
 }
 
 const AGENT_FULL_NAMES: Record<string, string> = {
-  technical: 'Technical Analyst',
+  technical:   'Technical Analyst',
   fundamental: 'Fundamental Analyst',
-  sentiment: 'Sentiment Analyst',
-  risk: 'Risk Manager',
+  sentiment:   'Sentiment Analyst',
+  risk:        'Risk Manager',
+  rl:          'Quant Model',
 };
 
 const AGENT_DESCS: Record<string, string> = {
-  technical: 'Chart Patterns · RSI · MACD · Bollinger Bands',
+  technical:   'Chart Patterns · RSI · MACD · Bollinger Bands',
   fundamental: 'Valuation · Market Conditions · Financial Metrics',
-  sentiment: 'News Processing · Social Signals · Market Mood',
-  risk: 'Position Sizing · Stop-Loss · Risk/Reward',
+  sentiment:   'News Processing · Social Signals · Market Mood',
+  risk:        'Position Sizing · Stop-Loss · Risk/Reward',
+  rl:          'PPO Policy · Downtrend Shield · Indicator Patterns',
+};
+
+/** Whether the agent is an LLM (AI Analyst) vs a trained RL policy (Quant Model) */
+const AGENT_TYPE: Record<string, 'AI ANALYST' | 'QUANT MODEL'> = {
+  technical:   'AI ANALYST',
+  fundamental: 'AI ANALYST',
+  sentiment:   'AI ANALYST',
+  risk:        'AI ANALYST',
+  rl:          'QUANT MODEL',
 };
 
 /** Heuristic: detect a backend fallback so we can render a recovery UI instead
@@ -32,10 +43,11 @@ function isFallback(analysis: AgentAnalysis): boolean {
 }
 
 function AgentIcon({ id, size = 20 }: { id: string; size?: number }) {
-  if (id === 'technical') return <IconTechnical size={size} color="currentColor" strokeWidth={1.5} />;
+  if (id === 'technical')   return <IconTechnical   size={size} color="currentColor" strokeWidth={1.5} />;
   if (id === 'fundamental') return <IconFundamental size={size} color="currentColor" strokeWidth={1.5} />;
-  if (id === 'sentiment') return <IconSentiment size={size} color="currentColor" strokeWidth={1.5} />;
-  if (id === 'risk') return <IconRisk size={size} color="currentColor" strokeWidth={1.5} />;
+  if (id === 'sentiment')   return <IconSentiment   size={size} color="currentColor" strokeWidth={1.5} />;
+  if (id === 'risk')        return <IconRisk        size={size} color="currentColor" strokeWidth={1.5} />;
+  if (id === 'rl')          return <IconRL          size={size} color="currentColor" strokeWidth={1.5} />;
   return null;
 }
 
@@ -83,7 +95,27 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
             <AgentIcon id={agent.id} size={18} />
           </div>
           <div>
-            <div className="agent-card__name">{AGENT_FULL_NAMES[agent.id] ?? agent.name}</div>
+            <div className="agent-card__name">
+              {AGENT_FULL_NAMES[agent.id] ?? agent.name}
+              {/* Type badge — distinguishes Quant Model from AI Analyst cards */}
+              <span
+                className="agent-card__type-badge"
+                style={{
+                  marginLeft: 7,
+                  fontSize: 9,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  verticalAlign: 'middle',
+                  background: agent.id === 'rl' ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.06)',
+                  color: agent.id === 'rl' ? '#a78bfa' : 'var(--text-3)',
+                  border: agent.id === 'rl' ? '1px solid rgba(139,92,246,0.3)' : '1px solid rgba(255,255,255,0.10)',
+                }}
+              >
+                {AGENT_TYPE[agent.id] ?? 'AI ANALYST'}
+              </span>
+            </div>
             <div className="agent-card__desc faint">{AGENT_DESCS[agent.id]}</div>
           </div>
         </div>

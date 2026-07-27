@@ -55,6 +55,14 @@ const INITIAL_AGENTS: AgentState[] = [
     status: 'idle',
     description: 'Portfolio risk, position sizing, stop-loss / take-profit levels',
   },
+  {
+    id: 'rl',
+    name: 'Quant',
+    icon: 'rl',
+    color: '#8b5cf6',
+    status: 'idle',
+    description: 'PPO reinforcement-learning policy — defensive/risk-hedging signal',
+  },
 ];
 
 // Easing for the price-counter animation. easeOutCubic — price decelerates
@@ -252,9 +260,9 @@ export default function App() {
     // no-op when they eventually fire.
     const generation = ++runGenerationRef.current;
 
-    // Animate agents lighting up almost simultaneously so all four are
-    // "scanning" before the parallel backend resolves (~450 ms total).
-    const agentIds = ['technical', 'fundamental', 'sentiment', 'risk'];
+    // Animate agents lighting up almost simultaneously so all five are
+    // "scanning" before the parallel backend resolves (~600 ms total).
+    const agentIds = ['technical', 'fundamental', 'sentiment', 'risk', 'rl'];
     agentIds.forEach((id, i) => {
       const t = setTimeout(() => {
         if (runGenerationRef.current !== generation) return;
@@ -301,7 +309,7 @@ export default function App() {
     setError(null);
   }
 
-  const agentKeys = ['technical', 'fundamental', 'sentiment', 'risk'] as const;
+  const agentKeys = ['technical', 'fundamental', 'sentiment', 'risk', 'rl'] as const;
 
   // Watchlist header aggregate — drives "5 stocks · avg +0.42% · 12s ago".
   const watchlistAggregate = (() => {
@@ -519,8 +527,8 @@ export default function App() {
                   <h2 className="empty-state__title">INTELLIGENCE STANDBY</h2>
                   <p className="empty-state__desc">
                     Select a ticker and launch the multi-agent analysis.<br />
-                    Four specialized AI agents will simultaneously process technical signals,<br />
-                    fundamental data, sentiment, and risk — then synthesize a final call.
+                    Five specialized models will simultaneously process technical signals,<br />
+                    fundamental data, sentiment, risk, and a PPO quant model — then synthesize a final call.
                   </p>
                   <div className="empty-state__agents">
                     {INITIAL_AGENTS.map(a => (
@@ -608,7 +616,7 @@ export default function App() {
                   </div>
                   <h2 className="empty-state__title" style={{ letterSpacing: '0.24em' }}>SYNTHESISING FINAL CALL</h2>
                   <p className="empty-state__desc">
-                    All four agents have returned their analyses.<br />
+                    All five agents have returned their analyses.<br />
                     Coordinator Agent is merging them into a single recommendation…
                   </p>
                 </div>
@@ -632,12 +640,16 @@ export default function App() {
                   <div className="agent-cards-section">
                     <div className="section-header">
                       <span className="section-header__tag">AGENT ANALYSIS</span>
-                      <span className="faint" style={{ fontSize: 12 }}>4 specialized models · parallel inference</span>
+                      <span className="faint" style={{ fontSize: 12 }}>5 specialized models · 4 AI analysts + 1 quant model · parallel inference</span>
                     </div>
                     <div className="agent-cards-grid">
                       {agentKeys.map((key, i) => {
                         const agent = agents.find(a => a.id === key);
-                        const analysis = results?.[`${key}_analysis` as keyof AnalysisResults] as AgentState['analysis'];
+                        // rl_analysis uses key 'rl' but result key is 'rl_analysis'
+                        const resultKey = key === 'rl'
+                          ? 'rl_analysis'
+                          : `${key}_analysis` as keyof AnalysisResults;
+                        const analysis = results?.[resultKey] as AgentState['analysis'];
                         if (!agent || !analysis) return null;
                         return (
                           <AgentCard

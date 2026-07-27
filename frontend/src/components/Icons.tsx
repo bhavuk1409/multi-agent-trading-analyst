@@ -156,3 +156,31 @@ export function IconHold({ size = defaults.size, strokeWidth = defaults.strokeWi
     </svg>
   );
 }
+
+/** CPU chip / quant model — visually distinct from the AI-analyst icons */
+export function IconRL({ size = defaults.size, strokeWidth = defaults.strokeWidth, color = defaults.color }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      {/* Outer chip body */}
+      <rect x="7" y="7" width="10" height="10" rx="1.5" />
+      {/* Top pins */}
+      <line x1="9"  y1="7"  x2="9"  y2="4" />
+      <line x1="12" y1="7"  x2="12" y2="4" />
+      <line x1="15" y1="7"  x2="15" y2="4" />
+      {/* Bottom pins */}
+      <line x1="9"  y1="20" x2="9"  y2="17" />
+      <line x1="12" y1="20" x2="12" y2="17" />
+      <line x1="15" y1="20" x2="15" y2="17" />
+      {/* Left pins */}
+      <line x1="7"  y1="9"  x2="4"  y2="9" />
+      <line x1="7"  y1="12" x2="4"  y2="12" />
+      <line x1="7"  y1="15" x2="4"  y2="15" />
+      {/* Right pins */}
+      <line x1="20" y1="9"  x2="17" y2="9" />
+      <line x1="20" y1="12" x2="17" y2="12" />
+      <line x1="20" y1="15" x2="17" y2="15" />
+      {/* Inner core dot */}
+      <circle cx="12" cy="12" r="1.8" fill={color} stroke="none" />
+    </svg>
+  );
+}

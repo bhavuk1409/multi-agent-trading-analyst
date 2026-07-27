@@ -94,10 +94,26 @@ function ActionIcon({ action }: { action: string }) {
 }
 
 /** Detect a backend fallback verdict so we render an "incomplete" state
- * instead of pretending the Coordinator returned a HOLD. */
+ * instead of pretending the Coordinator returned a HOLD.
+ *
+ * We check two signals:
+ *   1. confidence === 0  — _default_decision() always returns 0; a real
+ *      Coordinator response will be ≥ 1 even when capped.
+ *   2. The exact fallback reasoning prefix the backend emits.
+ *
+ * We deliberately do NOT check for loose substrings like "unavailable"
+ * because the Coordinator's OWN reasoning often says "No agents reported
+ * unavailable", which is a healthy success message that contains the word.
+ */
 function isDecisionFallback(decision: FinalDecision): boolean {
+  if (decision.confidence === 0) return true;
   const r = (decision.reasoning || '').toLowerCase();
-  return r.includes('unavailable') || r.includes('decision error') || r.includes('decision failed');
+  return (
+    r.startsWith('decision unavailable') ||
+    r.startsWith('decision error') ||
+    r.startsWith('decision failed') ||
+    r.includes('one or more agents failed. retry')
+  );
 }
 
 export function DecisionPanel({ decision, ticker }: DecisionPanelProps) {

@@ -25,17 +25,22 @@ llm:
 
 # ---------------------------------------------------------------------------
 # Multi-Agent weights  (must sum to 1.0)
+# Technical + Risk stay at 0.20; Fundamental + Sentiment get +0.025 each
+# from the 0.05 freed by pricing the RL trader below the equal-split rate.
 # ---------------------------------------------------------------------------
 agents:
   technical_analyst:
     enabled: true
-    weight: 0.25
+    weight: 0.20
   fundamental_analyst:
     enabled: true
-    weight: 0.25
+    weight: 0.225
   sentiment_analyst:
     enabled: true
-    weight: 0.25
+    weight: 0.225
   risk_manager:
     enabled: true
-    weight: 0.25
+    weight: 0.20
+  rl_trader:
+    enabled: true
+    weight: 0.15    # lower weight — stronger at downtrend avoidance than uptrend capture

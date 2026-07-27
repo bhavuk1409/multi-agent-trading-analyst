@@ -60,6 +60,7 @@ export interface AnalysisResults {
   fundamental_analysis?: AgentAnalysis;
   sentiment_analysis?:   AgentAnalysis;
   risk_analysis?:        AgentAnalysis;
+  rl_analysis?:          AgentAnalysis;   // PPO quant model — defensive/risk-hedging signal
   final_decision?:       FinalDecision;
   ticker?:               string;
   date?:                 string;

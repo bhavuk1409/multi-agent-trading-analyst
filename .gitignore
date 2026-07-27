@@ -66,3 +66,8 @@ htmlcov/
 *.key
 *.pem
 *.cert
+
+# RL training artefacts — large files not needed at inference time.
+# Inference uses models/rl_policy_weights.npz which IS committed.
+models/rl_policy_ppo.zip
+models/tb_logs/

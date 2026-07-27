@@ -26,11 +26,26 @@ sys.path.insert(0, str(ROOT_DIR / "src"))
 
 from data_handler import DataHandler
 from multi_agent_system import AdvancedMultiAgentSystem
+try:
+    from rl_agent import get_rl_trader_agent as _get_rl_agent
+except Exception as _rl_import_err:
+    logger.warning("rl_agent import failed (%s) — rl_analysis will degrade.", _rl_import_err)
+    _get_rl_agent = None
 
 SUPPORTED_TICKERS = ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA"]
 # 400 calendar days ≈ 260 trading days — enough for the 1Y chart selector with
 # a few days of slack for holidays.
 HISTORY_DAYS = 400
+
+# RL inference agent — loaded once at module load, shared across warm invocations.
+# Uses pure-numpy forward pass; adds 0 MB to the Vercel bundle (numpy is already
+# a prod dependency). Falls back gracefully if weights file is absent.
+_rl_agent = None
+if _get_rl_agent is not None:
+    try:
+        _rl_agent = _get_rl_agent()
+    except Exception as _rl_exc:
+        logger.warning("RLTraderAgent init failed (%s) — rl_analysis will degrade.", _rl_exc)
 
 # Re-used across warm serverless invocations
 _agent_system = None
@@ -53,10 +68,9 @@ def get_agent_system():
             _agent_system = AdvancedMultiAgentSystem(
                 model=model,
                 temperature=0.7,
+                rl_agent=_rl_agent,   # None-safe: MAS falls back to degraded hold
             )
         except Exception as exc:
-            # Surface a clean 500 message to the client instead of letting
-            # the constructor's ValueError escape the handler.
             logger.exception("Agent system init failed")
             raise RuntimeError(f"Agent system unavailable: {exc}") from exc
     return _agent_system

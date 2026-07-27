@@ -46,15 +46,20 @@ class AdvancedMultiAgentSystem:
         model: str = "llama-3.3-70b-versatile",
         temperature: float = 0.7,
         agent_config: Dict[str, Any] = None,
+        rl_agent=None,
     ):
         self.model_name = model
         self.temperature = temperature
         self.agent_config = agent_config or {
-            "technical_analyst":   {"enabled": True, "weight": 0.25},
-            "fundamental_analyst": {"enabled": True, "weight": 0.25},
-            "sentiment_analyst":   {"enabled": True, "weight": 0.25},
-            "risk_manager":        {"enabled": True, "weight": 0.25},
+            "technical_analyst":   {"enabled": True, "weight": 0.20},
+            "fundamental_analyst": {"enabled": True, "weight": 0.225},
+            "sentiment_analyst":   {"enabled": True, "weight": 0.225},
+            "risk_manager":        {"enabled": True, "weight": 0.20},
+            "rl_trader":           {"enabled": True, "weight": 0.15},
         }
+        # Optional RL inference agent — injected at startup from api_server.py
+        # so the PPO model is loaded once and reused across requests.
+        self.rl_agent = rl_agent
 
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -211,10 +216,33 @@ class AdvancedMultiAgentSystem:
                      for cfg_key, sys_p, usr_p in agent_specs]
             return await asyncio.gather(*tasks)
 
+        # ------------------------------------------------------------------
+        # Step 0 (pre-gather): Run the RL agent synchronously.
+        # The PPO forward pass takes <1 ms — negligible latency.
+        # Placing it HERE, before asyncio.run(), means it overlaps with the
+        # event-loop setup overhead and is fully resolved before any
+        # LLM response comes back.  It does NOT add to total wall-clock time.
+        # ------------------------------------------------------------------
+        rl_cfg_enabled = self.agent_config.get("rl_trader", {}).get("enabled", True)
+        if self.rl_agent is not None and rl_cfg_enabled:
+            try:
+                results["rl_analysis"] = self.rl_agent.predict(market_data)
+                logger.info("  ✓ RL trader predict() complete (synchronous, pre-gather)")
+            except Exception as exc:
+                logger.error("rl_trader predict failed: %s", exc)
+                results["rl_analysis"] = self._default_analysis()
+        else:
+            results["rl_analysis"] = {
+                "recommendation": "hold",
+                "confidence": 0,
+                "reasoning": "RL trader not initialised — run scripts/train_rl_agent.py to generate the model.",
+                "degraded": True,
+            }
+
         gathered = asyncio.run(_gather_agents())
         for key, payload in zip(result_keys, gathered):
             results[key] = payload
-        logger.info("  ✓ All 4 specialist agents complete (parallel)")
+        logger.info("  ✓ All 4 LLM specialist agents complete (parallel asyncio.gather)")
 
         # 5. Coordinator Decision
         try:
@@ -222,14 +250,16 @@ class AdvancedMultiAgentSystem:
             atr           = float(market_data.get("atr_14", current_price * 0.02) or current_price * 0.02)
 
             # Pre-compute a numeric weighted signal so the LLM has a concrete
-            # starting point instead of guessing from the [weight=0.25] labels.
+            # starting point instead of guessing from the [weight] labels.
+            # rl_analysis is included in the weighted signal alongside the 4 LLM agents.
             cfg_map = {
                 "technical_analysis":   "technical_analyst",
                 "fundamental_analysis": "fundamental_analyst",
                 "sentiment_analysis":   "sentiment_analyst",
                 "risk_analysis":        "risk_manager",
+                "rl_analysis":          "rl_trader",
             }
-            raw_weights = {k: float(self.agent_config.get(v, {}).get("weight", 0.25))
+            raw_weights = {k: float(self.agent_config.get(v, {}).get("weight", 0.20))
                           for k, v in cfg_map.items()}
             w_sum = sum(raw_weights.values()) or 1.0
             norm_weights = {k: v / w_sum for k, v in raw_weights.items()}
@@ -248,16 +278,20 @@ class AdvancedMultiAgentSystem:
             )
 
             sys_p = (
-                "You are the head trader coordinating the four specialist analyses below.\n"
+                "You are the head trader coordinating the five specialist analyses below "
+                "(four LLM agents + one RL quant model).\n"
                 "Follow these synthesis rules strictly:\n"
                 "  - If 3+ agents say 'buy' but the risk agent says 'sell' with confidence >70, default to 'hold'.\n"
-                "  - If only 1 of 4 agents has confidence >70, cap final confidence at 60 and prefer 'hold'.\n"
-                "  - Position size: Kelly-lite = (confidence/100) * 0.25, clamped to [0.02, 0.30].\n"
+                "  - If only 1 of 5 agents has confidence >70, cap final confidence at 60 and prefer 'hold'.\n"
+                "  - The RL Trader is a defensive/risk-hedging signal (weight 0.15) — it is historically "
+                "    stronger at avoiding sustained downtrends than capturing uptrends. "
+                "    Reduce its influence when fundamental/sentiment agents are strongly bullish.\n"
+                "  - Position size: compute Kelly-lite = (confidence/100) * 0.25, clamp to [0.02, 0.30], then output the final decimal number (e.g. 0.15). Do NOT write arithmetic expressions in the JSON.\n"
                 "  - Stop-loss: entry - max(2 × ATR-14, 5% of entry) — the wider of the two.\n"
                 "  - Take-profit: must keep risk:reward >= 1.5, anchored from the stop distance.\n"
                 "  - Time horizon: short-term if momentum dominates; long-term if fundamental thesis.\n"
                 "  - Use the pre-computed 'Weighted signal' below as the starting point, then justify.\n"
-                f"  - {degraded_count} of 4 agents reported 'unavailable' — knock final confidence down by 10×{degraded_count} points and mention it in reasoning.\n"
+                f"  - {degraded_count} of 5 agents reported 'unavailable' — knock final confidence down by 10×{degraded_count} points and mention it in reasoning.\n"
                 "Return ONLY a JSON object (no prose):\n"
                 "{\n"
                 '  "action": "buy|sell|hold",\n'
@@ -280,8 +314,31 @@ class AdvancedMultiAgentSystem:
                 f"Agent Analyses (relative weights shown, total 1.0):\n"
                 f"{self._format_agent_results(results, include_weights=True)}"
             )
-            results["final_decision"] = self._call_llm(sys_p, usr_p)
-            logger.info("  ✓ Final decision made")
+            import time as _time
+            _coordinator_result = None
+            _last_exc = None
+            for _attempt in range(1, 4):          # up to 3 attempts
+                try:
+                    _coordinator_result = self._call_llm(sys_p, usr_p)
+                    break
+                except Exception as _exc:
+                    _last_exc = _exc
+                    if _attempt < 3:
+                        _delay = _attempt          # 1 s, then 2 s
+                        logger.warning(
+                            "Coordinator attempt %d/3 failed (%s) — retrying in %ds …",
+                            _attempt, type(_exc).__name__, _delay,
+                        )
+                        _time.sleep(_delay)
+                    else:
+                        logger.error("Coordinator failed after 3 attempts: %s", _last_exc)
+
+            if _coordinator_result is not None:
+                results["final_decision"] = _coordinator_result
+                logger.info("  ✓ Final decision made")
+            else:
+                results["final_decision"] = self._default_decision(market_data.get("close", 0))
+
         except Exception as e:
             logger.error(f"Coordinator error: {e}")
             results["final_decision"] = self._default_decision(market_data.get("close", 0))
@@ -394,22 +451,51 @@ class AdvancedMultiAgentSystem:
         return "\n".join(lines)
 
     def _format_agent_results(self, results: Dict[str, Any], include_weights: bool = False) -> str:
+        """
+        Format all 5 agents' results for the Coordinator's prompt.
+
+        For the RL Trader, we use a trimmed one-line reasoning instead of the
+        full 3-sentence string (which contains 9 indicator values + risk-profile
+        note).  The full reasoning is preserved in results['rl_analysis']['reasoning']
+        and returned to the frontend for the AgentCard.  This keeps the
+        Coordinator's token usage comparable to the 4-LLM-agent baseline.
+        """
+        import re as _re
         cfg_map = {
             "technical_analysis":   "technical_analyst",
             "fundamental_analysis": "fundamental_analyst",
             "sentiment_analysis":   "sentiment_analyst",
             "risk_analysis":        "risk_manager",
+            "rl_analysis":          "rl_trader",
         }
-        weights = {k: float(self.agent_config.get(v, {}).get("weight", 0.25))
+        weights = {k: float(self.agent_config.get(v, {}).get("weight", 0.20))
                    for k, v in cfg_map.items()}
         total = sum(weights.values()) or 1.0
         lines = []
-        for k in ["technical_analysis", "fundamental_analysis", "sentiment_analysis", "risk_analysis"]:
-            if k in results:
-                a = results[k]
-                header = k.replace("_", " ").title()
-                if include_weights:
-                    header += f"  [weight={weights[k] / total:.2f}]"
+        for k in ["technical_analysis", "fundamental_analysis",
+                  "sentiment_analysis", "risk_analysis", "rl_analysis"]:
+            if k not in results:
+                continue
+            a = results[k]
+            header = k.replace("_", " ").title()
+            if include_weights:
+                header += f"  [weight={weights[k] / total:.2f}]"
+
+            if k == "rl_analysis":
+                # Trim: extract only the probability breakdown sentence from the
+                # full reasoning to avoid bloating the Coordinator's context.
+                # Full reasoning stays in results['rl_analysis'] for the frontend.
+                raw = a.get("reasoning", "N/A")
+                m = _re.search(r"Action probability breakdown[^.]+\.", raw)
+                short = (m.group(0) if m else raw[:140] + "…")
+                short += " [Defensive/risk-hedging — stronger at downtrend avoidance than uptrend capture.]"
+                lines.append(
+                    f"{header}:\n"
+                    f"- Recommendation: {a.get('recommendation', 'N/A')}\n"
+                    f"- Confidence: {a.get('confidence', 0)}%\n"
+                    f"- Signal: {short}\n"
+                )
+            else:
                 lines.append(
                     f"{header}:\n"
                     f"- Recommendation: {a.get('recommendation', 'N/A')}\n"

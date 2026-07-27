@@ -1,0 +1,18 @@
+# NEXUS — RL Trader: Training-time dependencies only
+# ====================================================
+# These packages are NOT in requirements.txt (Vercel lean bundle).
+# Install locally with:
+#   pip install -r requirements-training.txt
+
+# RL training framework
+stable-baselines3[extra]>=2.3.0   # includes PyTorch CPU, gymnasium, tensorboard
+
+# Gymnasium (also pulled by stable-baselines3[extra] but pinned explicitly)
+gymnasium>=0.29.0
+
+# Utilities already in requirements.txt — listed here for completeness
+# (pip is smart enough not to re-install if already satisfied):
+#   yfinance>=0.2.28
+#   numpy>=1.24.0
+#   pandas>=2.0.0
+#   python-dotenv>=1.0.0

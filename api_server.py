@@ -36,6 +36,7 @@ try:
     import yaml
     from data_handler import DataHandler
     from multi_agent_system import AdvancedMultiAgentSystem
+    from rl_agent import get_rl_trader_agent
     try:
         from data_handler import iter_quote_stream
     except Exception as _exc:
@@ -73,13 +74,21 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
 # ---------------------------------------------------------------------------
 _config = load_config()
 
+# RL inference agent — loaded once at startup, shared across all requests
+try:
+    _rl_agent = get_rl_trader_agent()
+except Exception as _rl_exc:
+    logger.warning("RLTraderAgent init failed (%s) — rl_analysis will degrade.", _rl_exc)
+    _rl_agent = None
+
 try:
     _agent_system = AdvancedMultiAgentSystem(
         model=_config.get("llm", {}).get("model", "llama-3.3-70b-versatile"),
         temperature=_config.get("llm", {}).get("temperature", 0.7),
         agent_config=_config.get("agents", {}),
+        rl_agent=_rl_agent,
     )
-    logger.info("✓ AdvancedMultiAgentSystem ready")
+    logger.info("✓ AdvancedMultiAgentSystem ready (5 agents)")
 except Exception as exc:
     logger.error(f"Failed to initialise agent system: {exc}")
     _agent_system = None
