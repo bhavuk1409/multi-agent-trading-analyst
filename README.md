@@ -56,29 +56,29 @@ The original four-agent LLM system has been extended with a **fifth agent: the Q
 
 ```mermaid
 flowchart TD
-    subgraph Frontend [React Frontend (Vite · TypeScript · Framer Motion)]
+    subgraph Frontend ["React Frontend (Vite · TypeScript · Framer Motion)"]
         UI[User Interface]
     end
 
-    subgraph Backend [Python API Server (Vercel Serverless)]
+    subgraph Backend ["Python API Server (Vercel Serverless)"]
         API[API Endpoints]
         MAS[AdvancedMultiAgentSystem]
         
-        subgraph Agents [Parallel Async Execution]
-            TA[Technical Analyst LLM]
-            FA[Fundamental Analyst LLM]
-            SA[Sentiment Analyst LLM]
-            RM[Risk Manager LLM]
+        subgraph Agents ["Parallel Async Execution"]
+            TA["Technical Analyst LLM"]
+            FA["Fundamental Analyst LLM"]
+            SA["Sentiment Analyst LLM"]
+            RM["Risk Manager LLM"]
         end
         
-        RL[Quant Model RL - Numpy]
-        COORD[Coordinator LLM]
+        RL["Quant Model RL - Numpy"]
+        COORD["Coordinator LLM"]
     end
 
-    subgraph Data [External APIs]
-        YF[Yahoo Finance API]
-        EXA[Exa Neural Search API]
-        GROQ[Groq LLaMA 3.3 API]
+    subgraph Data ["External APIs"]
+        YF["Yahoo Finance API"]
+        EXA["Exa Neural Search API"]
+        GROQ["Groq LLaMA 3.3 API"]
     end
 
     UI <--> |HTTP /api/analyze| API
