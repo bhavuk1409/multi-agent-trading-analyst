@@ -97,21 +97,15 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
           <div>
             <div className="agent-card__name">
               {AGENT_FULL_NAMES[agent.id] ?? agent.name}
-              {/* Type badge — distinguishes Quant Model from AI Analyst cards */}
+              {/* Type badge — distinguishes Quant Model from AI Analyst cards.
+                  Inverted white-on-black treatment for the RL badge so it
+                  stays distinguishable without breaking the monochrome
+                  discipline (no purple). */}
               <span
-                className="agent-card__type-badge"
-                style={{
-                  marginLeft: 7,
-                  fontSize: 9,
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  padding: '2px 6px',
-                  borderRadius: 4,
-                  verticalAlign: 'middle',
-                  background: agent.id === 'rl' ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.06)',
-                  color: agent.id === 'rl' ? '#a78bfa' : 'var(--text-3)',
-                  border: agent.id === 'rl' ? '1px solid rgba(139,92,246,0.3)' : '1px solid rgba(255,255,255,0.10)',
-                }}
+                className={
+                  'agent-card__type-badge' +
+                  (agent.id === 'rl' ? ' agent-card__type-badge--inverse' : '')
+                }
               >
                 {AGENT_TYPE[agent.id] ?? 'AI ANALYST'}
               </span>

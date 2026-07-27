@@ -9,8 +9,9 @@ import { AgentCard } from './components/AgentCard';
 import { MarketReadout } from './components/MarketReadout';
 import { DecisionPanel } from './components/DecisionPanel';
 import { NewsFeed } from './components/NewsFeed';
-import { IconRun, IconRefresh, IconDownload } from './components/Icons';
+import { IconRun, IconRefresh } from './components/Icons';
 import { CompanySelect } from './components/CompanySelect';
+import { EmptyState } from './components/EmptyState';
 
 const TICKERS: Ticker[] = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA'];
 
@@ -493,134 +494,47 @@ export default function App() {
         <section className="nexus-right">
           <AnimatePresence mode="wait">
             {step === 'idle' && (
-              <motion.div
-                key="empty-state"
-                className="empty-state"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, scale: 0.97 }}
-              >
-                <div className="empty-state__inner">
-                  <div className="empty-state__grid" aria-hidden="true" />
-                  <div className="pulse-logo pulse-logo--idle">
-                    <svg width="112" height="112" viewBox="0 0 44 44" fill="none">
-                      <polygon
-                        points="22,3.5 39,13.3 39,33 22,42.8 5,33 5,13.3"
-                        stroke="url(#hex-grad-large)"
-                        strokeWidth="2.4"
-                        fill="none"
-                      />
-                      <polygon
-                        points="22,8 35,15.5 35,30.8 22,38.3 9,30.8 9,15.5"
-                        stroke="rgba(255,255,255,0.18)"
-                        strokeWidth="1"
-                        fill="none"
-                      />
-                      <defs>
-                        <linearGradient id="hex-grad-large" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-                          <stop offset="0%" stopColor="#ffffff" />
-                          <stop offset="100%" stopColor="#1a1a1a" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                  </div>
-                  <h2 className="empty-state__title">INTELLIGENCE STANDBY</h2>
-                  <p className="empty-state__desc">
+              <EmptyState
+                key="empty-state-idle"
+                variant="idle"
+                title="INTELLIGENCE STANDBY"
+                description={
+                  <>
                     Select a ticker and launch the multi-agent analysis.<br />
                     Five specialized models will simultaneously process technical signals,<br />
                     fundamental data, sentiment, risk, and a PPO quant model — then synthesize a final call.
-                  </p>
-                  <div className="empty-state__agents">
-                    {INITIAL_AGENTS.map(a => (
-                      <div key={a.id} className="empty-state__agent-pill">
-                        {a.name}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
+                  </>
+                }
+                agentPills={INITIAL_AGENTS.map(a => a.name)}
+              />
             )}
 
             {step === 'running' && !results && (
-              <motion.div
-                key="analyzing-state"
-                className="empty-state"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, scale: 0.97 }}
-              >
-                <div className="empty-state__inner">
-                  <div className="empty-state__grid" aria-hidden="true" />
-                  <div className="pulse-logo pulse-logo--active">
-                    <svg width="112" height="112" viewBox="0 0 44 44" fill="none">
-                      <polygon
-                        points="22,3.5 39,13.3 39,33 22,42.8 5,33 5,13.3"
-                        stroke="url(#hex-grad-analyzing)"
-                        strokeWidth="2.4"
-                        fill="none"
-                      />
-                      <polygon
-                        points="22,8 35,15.5 35,30.8 22,38.3 9,30.8 9,15.5"
-                        stroke="rgba(255,255,255,0.20)"
-                        strokeWidth="1"
-                        fill="none"
-                      />
-                      <defs>
-                        <linearGradient id="hex-grad-analyzing" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-                          <stop offset="0%" stopColor="#ffffff" />
-                          <stop offset="100%" stopColor="#1a1a1a" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                  </div>
-                  <h2 className="empty-state__title" style={{ letterSpacing: '0.24em' }}>ANALYZING MARKET</h2>
-                  <p className="empty-state__desc">
+              <EmptyState
+                key="empty-state-running"
+                variant="running"
+                title="ANALYZING MARKET"
+                description={
+                  <>
                     Retrieving market statistics and running multi-agent consensus chains...<br />
                     This process compiles real-time feeds and technical signals.
-                  </p>
-                </div>
-              </motion.div>
+                  </>
+                }
+              />
             )}
 
             {step === 'synthesising' && !results && (
-              <motion.div
-                key="synthesising-state"
-                className="empty-state"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, scale: 0.97 }}
-              >
-                <div className="empty-state__inner">
-                  <div className="empty-state__grid" aria-hidden="true" />
-                  <div className="pulse-logo pulse-logo--active">
-                    <svg width="112" height="112" viewBox="0 0 44 44" fill="none">
-                      <polygon
-                        points="22,3.5 39,13.3 39,33 22,42.8 5,33 5,13.3"
-                        stroke="url(#hex-grad-synthesising)"
-                        strokeWidth="2.4"
-                        fill="none"
-                      />
-                      <polygon
-                        points="22,8 35,15.5 35,30.8 22,38.3 9,30.8 9,15.5"
-                        stroke="rgba(245,166,35,0.30)"
-                        strokeWidth="1"
-                        fill="none"
-                      />
-                      <defs>
-                        <linearGradient id="hex-grad-synthesising" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse">
-                          <stop offset="0%" stopColor="#f5a623" />
-                          <stop offset="100%" stopColor="#1a1a1a" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                  </div>
-                  <h2 className="empty-state__title" style={{ letterSpacing: '0.24em' }}>SYNTHESISING FINAL CALL</h2>
-                  <p className="empty-state__desc">
+              <EmptyState
+                key="empty-state-synthesising"
+                variant="synthesising"
+                title="SYNTHESISING FINAL CALL"
+                description={
+                  <>
                     All five agents have returned their analyses.<br />
                     Coordinator Agent is merging them into a single recommendation…
-                  </p>
-                </div>
-              </motion.div>
+                  </>
+                }
+              />
             )}
 
             {results && (

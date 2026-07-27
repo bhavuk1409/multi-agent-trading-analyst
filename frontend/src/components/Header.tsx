@@ -57,7 +57,7 @@ export function Header({ apiUp }: HeaderProps) {
         </div>
 
         <div className="nexus-badges">
-          <span className="nexus-badge">4 AGENTS</span>
+          <span className="nexus-badge">5 AGENTS</span>
           <span className="nexus-badge nexus-badge--accent">LLaMA 3.3</span>
         </div>
       </div>

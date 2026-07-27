@@ -82,7 +82,7 @@
 /* ===================== LAYOUT ===================== */
 .nexus-layout {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 300px minmax(0, 1fr);
   gap: 16px;
   align-items: start;
   flex: 1;
@@ -91,10 +91,10 @@
   margin-bottom: 10px;
 }
 
-.nexus-left { 
-  display: flex; 
-  flex-direction: column; 
-  gap: 10px; 
+.nexus-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   height: 100%;
   min-height: 0;
   overflow-y: auto;
@@ -159,10 +159,10 @@
 
 /* ===================== CONTROL POD ===================== */
 .control-pod {
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   position: relative;
   z-index: 50;
 }
@@ -374,33 +374,35 @@
 }
 
 /* ===================== AGENT LEGEND ===================== */
+/* ===================== AGENT LEGEND ===================== */
 .agent-legend {
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   margin-top: auto;
 }
 
 .agent-legend__item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  padding: 2px 0;
 }
 
 .agent-legend__name {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-2);
   flex: 1;
 }
 
 .agent-legend__status {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 9px;
+  letter-spacing: 0.1em;
   font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 2px 7px;
+  border-radius: 3px;
 }
 .agent-legend__status--idle { color: var(--text-3); }
 .agent-legend__status--running { color: #ffffff; background: rgba(255, 255, 255, 0.1); }
@@ -452,7 +454,9 @@
   height: 140px;
 }
 
-/* Outer "radar" ring — concentric pulse used for the idle/standby state. */
+/* Outer "radar" rings — idle pulses outward (concentric sonar).
+   Active state overrides to a slow continuous rotation so the eye reads
+   "working" instead of "waiting". */
 .pulse-logo::before,
 .pulse-logo::after {
   content: '';
@@ -498,6 +502,22 @@
     opacity: 0.60;
     filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.10));
   }
+}
+
+/* ACTIVE state — override the idle pulse with a rotating dashed ring.
+   Stops the radar "ping", swaps to a slow rotation that visually says
+   "the model is processing". */
+.pulse-logo--active::before,
+.pulse-logo--active::after {
+  border-style: dashed;
+  animation: ringSpin 4s linear infinite;
+}
+.pulse-logo--active::before { animation-duration: 4s; }
+.pulse-logo--active::after  { animation-duration: 6s; animation-direction: reverse; }
+
+@keyframes ringSpin {
+  from { transform: rotate(0deg);   opacity: 0.55; }
+  to   { transform: rotate(360deg); opacity: 0.55; }
 }
 
 @keyframes logoGlowActive {
@@ -812,10 +832,16 @@
 
 .agent-cards-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 14px;
 }
-@media (max-width: 800px) {
+/* Tablet: 2 columns. 5 cards → 2+2+1 (the orphan still looks balanced because
+   the 5th is the RL/Quant card, which is visually distinct). */
+@media (max-width: 1100px) {
+  .agent-cards-grid { grid-template-columns: repeat(2, 1fr); }
+}
+/* Phone: 1 column. */
+@media (max-width: 640px) {
   .agent-cards-grid { grid-template-columns: 1fr; }
 }
 
@@ -870,6 +896,30 @@
 .agent-card__icon { font-size: 16px; line-height: 1; }
 .agent-card__name { font-weight: 600; font-size: 13px; color: var(--text); }
 .agent-card__desc { font-size: 10.5px; color: var(--text-3); margin-top: 1px; line-height: 1.4; }
+
+/* Type badge — distinguishes "AI ANALYST" vs "QUANT MODEL" on each card.
+   Default (AI ANALYST): subtle gray pill, nearly invisible.
+   Inverse (QUANT MODEL): inverted white-on-black so it pops without
+   introducing a non-monochrome hue. */
+.agent-card__type-badge {
+  margin-left: 7px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  vertical-align: middle;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-3);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  white-space: nowrap;
+}
+.agent-card__type-badge--inverse {
+  background: transparent;
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.55);
+}
 
 .agent-card__rec {
   padding: 4px 8px;
@@ -1258,10 +1308,10 @@
 
 /* ===================== WATCHLIST WIDGET ===================== */
 .watchlist-pod {
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .watchlist-pod__header {
@@ -1316,7 +1366,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 6px;
+  padding: 2px 6px;
   border-radius: var(--radius-sm);
   background: transparent;
   border: 1px solid transparent;
@@ -1339,27 +1389,36 @@
 
 .watchlist-item__left {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .watchlist-item__ticker {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text);
   letter-spacing: 0.02em;
 }
 
+/* Company name sub-line is hidden by default — ticker + price is enough
+   for at-a-glance scanning, and reclaiming the row height lets all 5
+   watchlist items + the agent legend fit without scrolling on a 1080p
+   viewport. Set data-show-name="true" on the row to opt back in. */
 .watchlist-item__name {
   font-size: 10px;
   color: var(--text-3);
+  display: none;
+}
+.watchlist-item[data-show-name="true"] .watchlist-item__name {
+  display: block;
 }
 
 .watchlist-item__right {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1px;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .watchlist-item__price {
