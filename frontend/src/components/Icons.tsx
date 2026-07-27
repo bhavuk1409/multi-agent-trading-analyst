@@ -128,6 +128,15 @@ export function IconChevronRight({ size = 14, strokeWidth = 1.8, color = default
   );
 }
 
+/** Chevron down arrow */
+export function IconChevronDown({ size = 14, strokeWidth = 1.8, color = defaults.color }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6,9 12,15 18,9" />
+    </svg>
+  );
+}
+
 /** Trending up / buy signal */
 export function IconTrendUp({ size = defaults.size, strokeWidth = defaults.strokeWidth, color = defaults.color }: IconProps) {
   return (

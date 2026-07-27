@@ -1,6 +1,7 @@
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { AgentAnalysis, AgentState } from '../types';
-import { IconTechnical, IconFundamental, IconSentiment, IconRisk, IconRL } from './Icons';
+import { IconTechnical, IconFundamental, IconSentiment, IconRisk, IconRL, IconChevronDown } from './Icons';
 import { HelpTip } from './HelpTip';
 import { HELP_TEXT } from '../helpText';
 
@@ -52,6 +53,8 @@ function AgentIcon({ id, size = 20 }: { id: string; size?: number }) {
 }
 
 export function AgentCard({ agent, analysis, index }: AgentCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   const rec = analysis.recommendation;
   const signalColor =
     rec === 'buy'
@@ -78,14 +81,22 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
 
   return (
     <motion.div
-      className={`agent-card glass ${fallback ? 'agent-card--error' : ''}`}
-      style={{ '--agent-accent': agent.color } as React.CSSProperties}
+      className={`agent-card glass ${fallback ? 'agent-card--error' : ''} ${isExpanded ? 'agent-card--expanded' : ''}`}
+      style={{ '--agent-accent': agent.color, cursor: 'pointer', userSelect: 'none' } as React.CSSProperties}
       initial={{ opacity: 0, y: 24, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: index * 0.07, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+      onClick={() => setIsExpanded(prev => !prev)}
+      role="button"
+      tabIndex={0}
+      aria-expanded={isExpanded}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setIsExpanded(prev => !prev);
+        }
+      }}
     >
-
-
       <div className="agent-card__header">
         <div className="agent-card__identity">
           <div
@@ -120,45 +131,64 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
           </div>
         </div>
 
-        {fallback ? (
-          <div
-            className="agent-card__rec agent-card__rec--error"
-            title={analysis.reasoning}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {fallback ? (
+            <div
+              className="agent-card__rec agent-card__rec--error"
+              title={analysis.reasoning}
+            >
+              <span className="agent-card__rec-text" style={{ color: 'var(--text-3)' }}>
+                NO DATA
+              </span>
+            </div>
+          ) : (
+            <div
+              className="agent-card__rec"
+              style={{ background: recBg, border: `1px solid ${recBorder}` }}
+            >
+              <span className="agent-card__rec-text" style={{ color: signalColor }}>
+                {analysis.recommendation.toUpperCase()}
+              </span>
+            </div>
+          )}
+          <motion.div
+            style={{ color: 'var(--text-3)', display: 'flex', alignItems: 'center' }}
+            animate={{ rotate: isExpanded ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
           >
-            <span className="agent-card__rec-text" style={{ color: 'var(--text-3)' }}>
-              NO DATA
-            </span>
-          </div>
-        ) : (
-          <div
-            className="agent-card__rec"
-            style={{ background: recBg, border: `1px solid ${recBorder}` }}
-          >
-            <span className="agent-card__rec-text" style={{ color: signalColor }}>
-              {analysis.recommendation.toUpperCase()}
-            </span>
-          </div>
-        )}
+            <IconChevronDown size={14} />
+          </motion.div>
+        </div>
       </div>
 
-      {/* Body: either confidence + reasoning (normal) or a clear recovery prompt */}
+      {/* Body: confidence bar (always visible) */}
       {fallback ? (
-        <div className="agent-card__error">
-          <div className="agent-card__error-icon" aria-hidden="true">⚠</div>
-          <div className="agent-card__error-body">
-            <div className="agent-card__error-title">Agent returned no data</div>
-            <div className="agent-card__error-msg">
-              The {AGENT_FULL_NAMES[agent.id] ?? agent.name} did not respond —
-              most likely a temporary rate limit. Re-run the analysis to retry this agent.
-            </div>
-          </div>
-        </div>
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.div
+              className="agent-card__error"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25 }}
+            >
+              <div className="agent-card__error-icon" aria-hidden="true">⚠</div>
+              <div className="agent-card__error-body">
+                <div className="agent-card__error-title">Agent returned no data</div>
+                <div className="agent-card__error-msg">
+                  The {AGENT_FULL_NAMES[agent.id] ?? agent.name} did not respond —
+                  most likely a temporary rate limit. Re-run the analysis to retry this agent.
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       ) : (
         <>
           {/* Confidence bar */}
           <div className="agent-card__confidence">
             <div className="agent-card__conf-header">
-              <span className="faint">
+              <span className="faint" onClick={(e) => e.stopPropagation()}>
                 Confidence
                 <HelpTip id={`tip-confidence-${agent.id}`} text={HELP_TEXT.confidence} />
               </span>
@@ -175,8 +205,20 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
             </div>
           </div>
 
-          {/* Reasoning */}
-          <p className="agent-card__reasoning">{analysis.reasoning}</p>
+          {/* Reasoning (collapsible) */}
+          <AnimatePresence initial={false}>
+            {isExpanded && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+                exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                style={{ overflow: 'hidden' }}
+              >
+                <p className="agent-card__reasoning">{analysis.reasoning}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </>
       )}
     </motion.div>
