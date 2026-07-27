@@ -105,20 +105,23 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
           >
             <AgentIcon id={agent.id} size={18} />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div className="agent-card__name">
               {AGENT_FULL_NAMES[agent.id] ?? agent.name}
-              {/* Type badge — distinguishes Quant Model from AI Analyst cards */}
+            </div>
+            {/* Type badge — distinguishes Quant Model from AI Analyst cards.
+                Sits on its own line below the name so it can't split "Technical
+                / Analyst" mid-word when the card is narrow. */}
+            <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span
                 className="agent-card__type-badge"
                 style={{
-                  marginLeft: 7,
                   fontSize: 9,
                   fontWeight: 700,
                   letterSpacing: '0.08em',
                   padding: '2px 6px',
                   borderRadius: 4,
-                  verticalAlign: 'middle',
+                  whiteSpace: 'nowrap',
                   background: agent.id === 'rl' ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.06)',
                   color: agent.id === 'rl' ? '#a78bfa' : 'var(--text-3)',
                   border: agent.id === 'rl' ? '1px solid rgba(139,92,246,0.3)' : '1px solid rgba(255,255,255,0.10)',
@@ -127,7 +130,7 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
                 {AGENT_TYPE[agent.id] ?? 'AI ANALYST'}
               </span>
             </div>
-            <div className="agent-card__desc faint">{AGENT_DESCS[agent.id]}</div>
+            <div className="agent-card__desc faint" style={{ marginTop: 4 }}>{AGENT_DESCS[agent.id]}</div>
           </div>
         </div>
 
