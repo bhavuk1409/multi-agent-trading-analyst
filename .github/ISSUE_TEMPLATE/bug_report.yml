@@ -1,0 +1,68 @@
+---
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much detail as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: "When I click Run Analysis for AAPL, the Final Decision panel shows 'NO DECISION' even though the server logs show '✓ Final decision made'."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the API server with `make server`
+        2. Start the frontend with `make frontend`
+        3. Select AAPL and click Run Analysis
+        4. Observe the Final Decision panel
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: The Final Decision panel should show the Coordinator's recommendation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant server logs
+      description: Paste the api_server.py output around the time of the failure.
+      render: text
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Local (api_server.py)
+        - Vercel (api/index.py)
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.12"
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: "20"

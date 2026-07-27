@@ -1,0 +1,48 @@
+---
+name: Feature Request
+description: Suggest a new agent, indicator, UI panel, or other improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Please describe what you'd like to see added or changed.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - New agent (LLM)
+        - New agent (RL / quant)
+        - New technical indicator
+        - New fundamental data
+        - Frontend / UI
+        - API / backend
+        - RL training pipeline
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What would you like?
+      placeholder: "Add an Options Flow agent that reads put/call ratio and implied volatility surface from the market_data dict and returns a sentiment-weighted buy/hold/sell signal."
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why would this be useful?
+      placeholder: "Options flow is one of the strongest leading indicators for short-term price direction and is currently not represented in any of the 5 agents."
+    validations:
+      required: true
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Rough implementation idea (optional)
+      placeholder: "Fetch put/call ratio from Yahoo Finance `.option_chain()`. Add it as a new field in DataHandler.get_market_summary(). Add a new agent entry in config/config.yaml."
