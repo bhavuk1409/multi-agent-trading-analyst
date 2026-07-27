@@ -41,6 +41,7 @@ yarn-error.log*
 # Build outputs
 *.tgz
 *.tar.gz
+*.tsbuildinfo
 
 # IDE
 .vscode/
