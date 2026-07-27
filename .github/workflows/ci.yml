@@ -22,7 +22,7 @@ jobs:
           cache: pip
 
       - name: Install production dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest
 
       - name: Run offline tests (no API keys required)
         run: python -m pytest tests/test_rl_env.py -v --tb=short
