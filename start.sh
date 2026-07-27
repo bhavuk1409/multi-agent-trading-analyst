@@ -53,7 +53,7 @@ if [ ! -f "$PYTHON" ]; then
   echo "Virtual environment not found at .venv/"
   echo "Create it with:"
   echo "  python3 -m venv .venv"
-  echo "  .venv/bin/pip install -r requirements.txt -c constraints.txt"
+  echo "  .venv/bin/pip install -r requirements.txt"
   exit 1
 fi
 

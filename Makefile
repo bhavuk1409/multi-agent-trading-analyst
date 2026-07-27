@@ -52,7 +52,7 @@ install:
 	python3 -m venv .venv
 	@echo "$(CYAN)▶  Installing production dependencies …$(RESET)"
 	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt -c constraints.txt
+	$(PIP) install -r requirements.txt
 	@echo "$(CYAN)▶  Installing frontend dependencies …$(RESET)"
 	cd frontend && npm install
 	@echo "$(GREEN)✓  Done. Copy .env.example → .env and add your GROQ_API_KEY.$(RESET)"

@@ -163,7 +163,7 @@ cp .env.example .env
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt -c constraints.txt
+pip install -r requirements.txt
 ```
 
 ### 4. Install frontend dependencies
@@ -248,7 +248,6 @@ python scripts/window_backtest.py
 ├── start.sh                   # One-command local startup
 ├── requirements.txt           # Prod Python deps (lean, Vercel-friendly, no torch)
 ├── requirements-training.txt  # Training-only deps (sb3, torch, gymnasium)
-├── constraints.txt            # pip resolver constraints
 ├── .env.example               # Environment variable template
 │
 ├── config/

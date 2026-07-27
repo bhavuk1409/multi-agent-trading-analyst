@@ -22,7 +22,7 @@ jobs:
           cache: pip
 
       - name: Install production dependencies
-        run: pip install -r requirements.txt -c constraints.txt
+        run: pip install -r requirements.txt
 
       - name: Run offline tests (no API keys required)
         run: python -m pytest tests/test_rl_env.py -v --tb=short
@@ -73,7 +73,7 @@ jobs:
           cache: pip
 
       - name: Install production dependencies
-        run: pip install -r requirements.txt -c constraints.txt
+        run: pip install -r requirements.txt
 
       - name: Smoke-test pure-numpy RL agent (no torch)
         run: |
