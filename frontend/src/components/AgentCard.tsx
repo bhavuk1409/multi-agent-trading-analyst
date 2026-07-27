@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { AgentAnalysis, AgentState } from '../types';
-import { IconTechnical, IconFundamental, IconSentiment, IconRisk, IconRL, IconChevronDown } from './Icons';
+import { IconTechnical, IconFundamental, IconSentiment, IconRisk, IconRL, IconChevronDown, IconChevronLeft } from './Icons';
 import { HelpTip } from './HelpTip';
 import { HELP_TEXT } from '../helpText';
 
@@ -9,6 +9,17 @@ interface AgentCardProps {
   agent: AgentState;
   analysis: AgentAnalysis;
   index: number;
+  /**
+   * Layout context:
+   * - `grid` (default): card sits in the 4-col grid; click focuses it.
+   * - `focus`: card is the only thing in the section; click is a no-op,
+   *   reasoning text is always visible, and a Back button replaces the chevron.
+   */
+  variant?: 'grid' | 'focus';
+  /** Called when the user clicks the card in `grid` mode. */
+  onFocus?: () => void;
+  /** Called when the user clicks the Back button (or hits Esc) in `focus` mode. */
+  onBack?: () => void;
 }
 
 const AGENT_FULL_NAMES: Record<string, string> = {
@@ -52,8 +63,20 @@ function AgentIcon({ id, size = 20 }: { id: string; size?: number }) {
   return null;
 }
 
-export function AgentCard({ agent, analysis, index }: AgentCardProps) {
+export function AgentCard({ agent, analysis, index, variant = 'grid', onFocus, onBack }: AgentCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Escape key dismisses focus mode — must be set up at the component level,
+  // not just on the card's onKeyDown, because the user might focus the card
+  // with their cursor outside the card's tabbable surface.
+  useEffect(() => {
+    if (variant !== 'focus') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onBack?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [variant, onBack]);
 
   const rec = analysis.recommendation;
   const signalColor =
@@ -78,25 +101,41 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
       : 'rgba(245, 166, 35, 0.25)';
 
   const fallback = isFallback(analysis);
+  const isFocus = variant === 'focus';
+
+  const handleCardClick = () => {
+    if (isFocus) return;          // in focus mode the click doesn't toggle
+    onFocus ? onFocus() : setIsExpanded(prev => !prev);
+  };
 
   return (
     <motion.div
-      className={`agent-card glass ${fallback ? 'agent-card--error' : ''} ${isExpanded ? 'agent-card--expanded' : ''}`}
-      style={{ '--agent-accent': agent.color, cursor: 'pointer', userSelect: 'none' } as React.CSSProperties}
-      initial={{ opacity: 0, y: 24, scale: 0.97 }}
+      className={`agent-card glass ${fallback ? 'agent-card--error' : ''} ${isFocus ? 'agent-card--focus' : ''}`}
+      style={{ '--agent-accent': agent.color, cursor: isFocus ? 'default' : 'pointer', userSelect: 'none' } as React.CSSProperties}
+      initial={isFocus ? { opacity: 0, y: 16 } : { opacity: 0, y: 24, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay: index * 0.07, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-      onClick={() => setIsExpanded(prev => !prev)}
+      onClick={handleCardClick}
       role="button"
       tabIndex={0}
-      aria-expanded={isExpanded}
+      aria-expanded={isFocus || isExpanded}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          setIsExpanded(prev => !prev);
+          handleCardClick();
         }
       }}
     >
+      {isFocus && (
+        <button
+          type="button"
+          className="agent-card__back"
+          onClick={(e) => { e.stopPropagation(); onBack?.(); }}
+        >
+          <IconChevronLeft size={12} />
+          <span>BACK TO ALL AGENTS</span>
+        </button>
+      )}
       <div className="agent-card__header">
         <div className="agent-card__identity">
           <div
@@ -154,20 +193,22 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
               </span>
             </div>
           )}
-          <motion.div
-            style={{ color: 'var(--text-3)', display: 'flex', alignItems: 'center' }}
-            animate={{ rotate: isExpanded ? 180 : 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <IconChevronDown size={14} />
-          </motion.div>
+          {!isFocus && (
+            <motion.div
+              style={{ color: 'var(--text-3)', display: 'flex', alignItems: 'center' }}
+              animate={{ rotate: isExpanded ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <IconChevronDown size={14} />
+            </motion.div>
+          )}
         </div>
       </div>
 
       {/* Body: confidence bar (always visible) */}
       {fallback ? (
         <AnimatePresence>
-          {isExpanded && (
+          {(isFocus || isExpanded) && (
             <motion.div
               className="agent-card__error"
               initial={{ opacity: 0, height: 0 }}
@@ -208,9 +249,9 @@ export function AgentCard({ agent, analysis, index }: AgentCardProps) {
             </div>
           </div>
 
-          {/* Reasoning (collapsible) */}
+          {/* Reasoning — always visible in focus mode, inline-expand in grid mode. */}
           <AnimatePresence initial={false}>
-            {isExpanded && (
+            {(isFocus || isExpanded) && (
               <motion.div
                 initial={{ opacity: 0, height: 0, marginTop: 0 }}
                 animate={{ opacity: 1, height: 'auto', marginTop: 8 }}

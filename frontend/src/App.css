@@ -914,6 +914,47 @@
   margin: 0;
 }
 
+/* ---------------------------------------------------------------------------
+   Focus mode — single agent card filling the whole AGENT DETAIL section.
+   Activated by passing `variant="focus"` to <AgentCard>.
+   --------------------------------------------------------------------------- */
+.agent-card-focus { width: 100%; }
+
+.agent-card--focus {
+  padding: 24px 28px;
+  gap: 18px;
+}
+.agent-card--focus .agent-card__name     { font-size: 20px; }
+.agent-card--focus .agent-card__desc     { font-size: 13px; }
+.agent-card--focus .agent-card__reasoning { font-size: 15px; line-height: 1.7; }
+.agent-card--focus .agent-card__rec       { padding: 8px 14px; }
+.agent-card--focus .agent-card__rec-text  { font-size: 14px; }
+.agent-card--focus .agent-card__icon-wrap { width: 48px; height: 48px; }
+.agent-card--focus .agent-card__conf-track { height: 8px; }
+
+.agent-card__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: 4px;
+  transition: color 0.15s ease;
+}
+.agent-card__back:hover { color: var(--text); }
+.agent-card__back:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
 /* Agent fallback / no-data state — used when the backend returned an error fallback */
 .agent-card--error .agent-card__icon-wrap { filter: grayscale(1); }
 

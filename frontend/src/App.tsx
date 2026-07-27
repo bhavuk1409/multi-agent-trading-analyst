@@ -83,6 +83,10 @@ export default function App() {
   const [watchlistLoading, setWatchlistLoading] = useState(true);
   const [watchlistFetchedAt, setWatchlistFetchedAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(Date.now());
+  // Agent-card focus mode — when set to an agent id, the AGENT ANALYSIS
+  // section swaps the 5-card grid for a single full-width card showing
+  // that specialist's reasoning. Cleared on every analysis re-run.
+  const [focusedAgentId, setFocusedAgentId] = useState<string | null>(null);
   const agentTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const runGenerationRef = useRef(0);
   // Live ticking prices — separate from `watchlist[].price` so we can animate
@@ -253,6 +257,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     setResults(null);
+    setFocusedAgentId(null);
     setStep('running');
     resetAgents();
 
@@ -305,6 +310,7 @@ export default function App() {
   function handleReset() {
     resetAgents();
     setResults(null);
+    setFocusedAgentId(null);
     setStep('idle');
     setError(null);
   }
@@ -639,28 +645,62 @@ export default function App() {
                 {step === 'done' && (
                   <div className="agent-cards-section">
                     <div className="section-header">
-                      <span className="section-header__tag">AGENT ANALYSIS</span>
-                      <span className="faint" style={{ fontSize: 12 }}>5 specialized models · 4 AI analysts + 1 quant model · parallel inference</span>
+                      <span className="section-header__tag">
+                        {focusedAgentId ? 'AGENT DETAIL' : 'AGENT ANALYSIS'}
+                      </span>
+                      <span className="faint" style={{ fontSize: 12 }}>
+                        {focusedAgentId
+                          ? 'Focused view · click Back to compare all 5'
+                          : '5 specialized models · 4 AI analysts + 1 quant model · parallel inference'}
+                      </span>
                     </div>
-                    <div className="agent-cards-grid">
-                      {agentKeys.map((key, i) => {
-                        const agent = agents.find(a => a.id === key);
-                        // rl_analysis uses key 'rl' but result key is 'rl_analysis'
-                        const resultKey = key === 'rl'
-                          ? 'rl_analysis'
-                          : `${key}_analysis` as keyof AnalysisResults;
-                        const analysis = results?.[resultKey] as AgentState['analysis'];
-                        if (!agent || !analysis) return null;
-                        return (
+
+                    {focusedAgentId ? (() => {
+                      // Resolve the focused agent + its analysis (mirrors the
+                      // grid's resultKey handling — rl uses 'rl_analysis').
+                      const agent = agents.find(a => a.id === focusedAgentId);
+                      const resultKey = focusedAgentId === 'rl'
+                        ? 'rl_analysis'
+                        : `${focusedAgentId}_analysis` as keyof AnalysisResults;
+                      const analysis = results?.[resultKey] as AgentState['analysis'];
+                      if (!agent || !analysis) return null;
+                      return (
+                        // key={focusedAgentId} so framer-motion replays the
+                        // enter animation when the user clicks a different
+                        // card from the grid.
+                        <div key={focusedAgentId} className="agent-card-focus">
                           <AgentCard
-                            key={key}
                             agent={agent}
                             analysis={analysis}
-                            index={i}
+                            index={0}
+                            variant="focus"
+                            onBack={() => setFocusedAgentId(null)}
                           />
-                        );
-                      })}
-                    </div>
+                        </div>
+                      );
+                    })() : (
+                      // Original 5-card grid view.
+                      <div className="agent-cards-grid">
+                        {agentKeys.map((key, i) => {
+                          const agent = agents.find(a => a.id === key);
+                          const resultKey = key === 'rl'
+                            ? 'rl_analysis'
+                            : `${key}_analysis` as keyof AnalysisResults;
+                          const analysis = results?.[resultKey] as AgentState['analysis'];
+                          if (!agent || !analysis) return null;
+                          return (
+                            <AgentCard
+                              key={key}
+                              agent={agent}
+                              analysis={analysis}
+                              index={i}
+                              variant="grid"
+                              onFocus={() => setFocusedAgentId(key)}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -119,6 +119,15 @@ export function IconNews({ size = defaults.size, strokeWidth = defaults.strokeWi
   );
 }
 
+/** Chevron left arrow */
+export function IconChevronLeft({ size = 14, strokeWidth = 1.8, color = defaults.color }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15,18 9,12 15,6" />
+    </svg>
+  );
+}
+
 /** Chevron right arrow */
 export function IconChevronRight({ size = 14, strokeWidth = 1.8, color = defaults.color }: IconProps) {
   return (
