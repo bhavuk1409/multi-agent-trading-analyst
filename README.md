@@ -55,43 +55,31 @@ The original four-agent LLM system has been extended with a **fifth agent: the Q
 ## System Architecture
 
 ```mermaid
-flowchart TD
-    subgraph Frontend ["React Frontend (Vite · TypeScript · Framer Motion)"]
-        UI[User Interface]
-    end
-
-    subgraph Backend ["Python API Server (Vercel Serverless)"]
-        API[API Endpoints]
-        MAS[AdvancedMultiAgentSystem]
-        
-        subgraph Agents ["Parallel Async Execution"]
-            TA["Technical Analyst LLM"]
-            FA["Fundamental Analyst LLM"]
-            SA["Sentiment Analyst LLM"]
-            RM["Risk Manager LLM"]
-        end
-        
-        RL["Quant Model RL - Numpy"]
-        COORD["Coordinator LLM"]
-    end
-
-    subgraph Data ["External APIs"]
-        YF["Yahoo Finance API"]
-        EXA["Exa Neural Search API"]
-        GROQ["Groq LLaMA 3.3 API"]
-    end
-
-    UI <--> |HTTP /api/analyze| API
-    API --> MAS
-    MAS --> |Fetch OHLCV / News| YF & EXA
+flowchart TB
+    UI["Frontend (React + Vite)"] -->|"/api/analyze"| API["Python API Server (Vercel)"]
     
-    YF & EXA --> TA & FA & SA & RM & RL
-    TA & FA & SA & RM --> |Inference| GROQ
-    RL --> |Pre-gather Synchronous| COORD
+    subgraph Data ["Data Sources"]
+        direction LR
+        YF["Yahoo Finance (OHLCV)"]
+        EXA["Exa (News)"]
+    end
     
-    TA & FA & SA & RM --> COORD
-    COORD --> |Synthesise Call| GROQ
-    COORD --> API
+    API -->|"Fetch Market Data"| Data
+    
+    subgraph Agents ["Multi-Agent System"]
+        direction TB
+        TA["Technical Analyst (LLM)"]
+        FA["Fundamental Analyst (LLM)"]
+        SA["Sentiment Analyst (LLM)"]
+        RM["Risk Manager (LLM)"]
+        RL["Quant Model (RL Numpy)"]
+    end
+    
+    Data --> TA & FA & SA & RM & RL
+    
+    TA & FA & SA & RM & RL -->|"Synthesise"| COORD["Coordinator (LLM)"]
+    
+    COORD -->|"Final Call"| API
 ```
 
 ---
