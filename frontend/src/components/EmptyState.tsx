@@ -55,6 +55,11 @@ interface EmptyStateProps {
 export function EmptyState({ variant, title, description, agentPills }: EmptyStateProps) {
   const isActive = variant !== 'idle';
 
+  // CSS defines two pulse-logo states: --idle (sonar ping) and --active
+  // (glowing hex + rotating dashed rings). Map our three UX variants onto
+  // those two states so the running/synthesising screens actually animate.
+  const pulseClass = isActive ? 'pulse-logo--active' : 'pulse-logo--idle';
+
   // Per-variant inner-hex stroke so the synthesising state can tint orange
   // without altering the outer gradient (which stays white-to-black).
   const innerStroke =
@@ -70,7 +75,7 @@ export function EmptyState({ variant, title, description, agentPills }: EmptySta
     >
       <div className="empty-state__inner">
         <div className="empty-state__grid" aria-hidden="true" />
-        <div className={`pulse-logo pulse-logo--${variant}`}>
+        <div className={`pulse-logo ${pulseClass}`}>
           <NexusHexLogo idSuffix={variant} innerStroke={innerStroke} />
         </div>
         <h2 className="empty-state__title" style={isActive ? { letterSpacing: '0.24em' } : undefined}>

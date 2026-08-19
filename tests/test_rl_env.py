@@ -33,7 +33,7 @@ from rl_env import (
 # ---------------------------------------------------------------------------
 
 def _make_df(n: int = 300, seed: int = 42) -> pd.DataFrame:
-    """Deterministic synthetic OHLCV + real indicators (via DataHandler)."""
+    """Deterministic OHLCV fixture + real indicators (via DataHandler)."""
     from data_handler import DataHandler
 
     rng = np.random.default_rng(seed)
@@ -147,7 +147,7 @@ class TestTradingEnv:
                 _, reward, _, _, _ = env.step(ACTION_BUY)
                 assert reward > 0, f"Expected positive reward, got {reward:.6f} (fwd={fwd:.4f})"
                 return
-        pytest.skip("No clearly positive forward return found in synthetic data")
+        pytest.skip("No clearly positive forward return found in test fixture data")
 
     def test_sell_negative_return_gives_positive_reward(self, df, stats):
         """SELL action on a bar with negative forward return → positive reward."""
@@ -162,7 +162,7 @@ class TestTradingEnv:
                 _, reward, _, _, _ = env.step(ACTION_SELL)
                 assert reward > 0, f"Expected positive reward, got {reward:.6f} (fwd={fwd:.4f})"
                 return
-        pytest.skip("No clearly negative forward return in synthetic data")
+        pytest.skip("No clearly negative forward return in test fixture data")
 
     def test_hold_reward_is_zero_regardless_of_return(self, df, stats):
         """HOLD always returns 0 (minus possible TC if switching from non-HOLD)."""

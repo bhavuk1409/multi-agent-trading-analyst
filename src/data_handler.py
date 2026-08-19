@@ -5,7 +5,7 @@ Primary data source: Yahoo Finance (via yfinance) — free, no API key required.
 News source:         Exa API (neural search) — requires EXA_API_KEY.
 News fallback:       yfinance built-in news — free, no API key required.
 
-No synthetic or mock data is generated.  If yfinance returns no data for a
+No fabricated data is generated.  If yfinance returns no data for a
 ticker, a ValueError is raised so the caller can surface a clear error rather
 than silently returning fabricated numbers.
 """

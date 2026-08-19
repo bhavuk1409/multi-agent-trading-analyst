@@ -5,7 +5,7 @@ interface HeaderProps {
 }
 
 export function Header({ apiUp }: HeaderProps) {
-  const statusText = apiUp === null ? 'CONNECTING' : apiUp ? 'SYSTEMS ONLINE' : 'DEMO MODE';
+  const statusText = apiUp === null ? 'CONNECTING' : apiUp ? 'SYSTEMS ONLINE' : 'BACKEND UNREACHABLE';
   const dotClass = apiUp === null ? 'dot--wait' : apiUp ? 'dot--live' : 'dot--off';
 
   return (
@@ -58,7 +58,7 @@ export function Header({ apiUp }: HeaderProps) {
 
         <div className="nexus-badges">
           <span className="nexus-badge">5 AGENTS</span>
-          <span className="nexus-badge nexus-badge--accent">LLaMA 3.3</span>
+          <span className="nexus-badge nexus-badge--accent">GPT-OSS 120B</span>
         </div>
       </div>
     </header>
