@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import './App.css';
 
 import type { AgentState, AnalysisResults, Ticker, WatchlistItem } from './types';
-import { checkHealth, runAnalysis, fetchWatchlist, connectWatchlistStream } from './api';
+import { checkHealth, runAnalysis, fetchWatchlist, connectWatchlistStream, RateLimitError } from './api';
 import { Header } from './components/Header';
 import { AgentCard } from './components/AgentCard';
 import { MarketReadout } from './components/MarketReadout';
@@ -86,6 +86,13 @@ export default function App() {
   const [now, setNow] = useState<number>(Date.now());
   const agentTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const runGenerationRef = useRef(0);
+  // Cooldown after a run — prevents rapid re-clicks burning the LLM chain.
+  // Set to a future timestamp; derived below against the `now` ticker.
+  const [cooldownUntil, setCooldownUntil] = useState<number>(0);
+  // Default cooldown after a successful analysis. Errors use the server's
+  // Retry-After (longer) or this fallback if no header was provided.
+  const SUCCESS_COOLDOWN_MS = 10_000;
+  const FALLBACK_ERROR_COOLDOWN_MS = 3_000;
   // Live ticking prices — separate from `watchlist[].price` so we can animate
   // the displayed digits from the old value to the new one over ~400 ms
   // instead of jumping. The backend `price` is the source of truth; this
@@ -251,6 +258,7 @@ export default function App() {
   /** Simulate the 4 agents lighting up one by one, then fire the real API. */
   async function handleRun() {
     if (loading) return;
+    if (now < cooldownUntil) return;   // still in cooldown — block re-entry
     setLoading(true);
     setError(null);
     setResults(null);
@@ -293,9 +301,18 @@ export default function App() {
 
       setResults(data);
       setStep('done');
+      setCooldownUntil(Date.now() + SUCCESS_COOLDOWN_MS);
     } catch (e) {
       if (runGenerationRef.current !== generation) return;
-      setError(e instanceof Error ? e.message : 'Analysis failed.');
+      if (e instanceof RateLimitError) {
+        setError(`Rate limit hit. Try again in ${e.retryAfter}s.`);
+        // Honour the server's Retry-After so the next click has a real chance.
+        setCooldownUntil(Date.now() + e.retryAfter * 1000);
+      } else {
+        setError(e instanceof Error ? e.message : 'Analysis failed.');
+        // Short fallback so a runaway retry loop doesn't hammer the API.
+        setCooldownUntil(Date.now() + FALLBACK_ERROR_COOLDOWN_MS);
+      }
       setAgents(prev => prev.map(a => ({ ...a, status: 'error' })));
       setStep('idle');
     } finally {
@@ -309,6 +326,12 @@ export default function App() {
     setStep('idle');
     setError(null);
   }
+
+  // Derived cooldown countdown (ms + seconds for display). The `now` ticker
+  // already updates every second via the interval above, so this re-renders
+  // automatically without a new timer.
+  const cooldownRemainingMs = Math.max(0, cooldownUntil - now);
+  const cooldownRemainingSec = Math.ceil(cooldownRemainingMs / 1000);
 
   const agentKeys = ['technical', 'fundamental', 'sentiment', 'risk', 'rl'] as const;
 
@@ -358,10 +381,12 @@ export default function App() {
                   id="run-analysis-btn"
                   className="btn btn--primary run-btn"
                   onClick={handleRun}
-                  disabled={loading}
+                  disabled={loading || cooldownRemainingMs > 0}
                 >
                   {loading ? (
                     <><span className="spinner" />ANALYZING…</>
+                  ) : cooldownRemainingMs > 0 ? (
+                    <>WAIT {cooldownRemainingSec}s…</>
                   ) : (
                     <><IconRun size={15} color="currentColor" /> RUN ANALYSIS</>
                   )}
@@ -601,7 +626,7 @@ export default function App() {
 
       <footer className="nexus-footer">
         <span className="mono faint">NEXUS · MULTI-AGENT TRADING INTELLIGENCE</span>
-        <span className="mono faint">GROQ · LLaMA 3.3 70B</span>
+        <span className="mono faint">GROQ · GPT-OSS 120B</span>
       </footer>
     </>
   );

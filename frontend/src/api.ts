@@ -2,13 +2,27 @@ import type { AnalysisResults, Ticker, WatchlistItem } from './types';
 
 const API_BASE = '/api';
 
+/**
+ * Thrown when the backend returns 429. Carries the parsed Retry-After (seconds)
+ * so the UI can show a friendly countdown and gate the next click.
+ */
+export class RateLimitError extends Error {
+  retryAfter: number;
+  constructor(message: string, retryAfter: number) {
+    super(message);
+    this.name = 'RateLimitError';
+    this.retryAfter = retryAfter;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Analysis
 // ---------------------------------------------------------------------------
 
 /**
  * Run the multi-agent analysis via the backend.
- * Throws an Error with the server's error message on failure.
+ * Throws RateLimitError on 429 (carrying Retry-After), or a generic Error
+ * with the server's error message on other failures.
  */
 export async function runAnalysis(ticker: Ticker): Promise<AnalysisResults> {
   const res = await fetch(`${API_BASE}/analyze`, {
@@ -20,12 +34,20 @@ export async function runAnalysis(ticker: Ticker): Promise<AnalysisResults> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    let message = text || `Server error ${res.status}`;
     try {
-      const { error } = JSON.parse(text);
-      throw new Error(error || `Server error ${res.status}`);
+      const parsed = JSON.parse(text);
+      if (parsed?.error) message = parsed.error;
     } catch {
-      throw new Error(text || `Server error ${res.status}`);
+      // Non-JSON body — keep raw text as the message.
     }
+
+    if (res.status === 429) {
+      const retryAfterHeader = res.headers.get('Retry-After');
+      const retryAfter = retryAfterHeader ? Math.max(1, parseInt(retryAfterHeader, 10) || 10) : 10;
+      throw new RateLimitError(message, retryAfter);
+    }
+    throw new Error(message);
   }
 
   return res.json() as Promise<AnalysisResults>;

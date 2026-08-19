@@ -17,6 +17,18 @@ from openai import AsyncOpenAI, OpenAI
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Upstream Groq concurrency limiter.
+# Bounds how many in-flight LLM requests this process can issue at once.
+# The 4 specialist agents run in parallel via asyncio.gather; without this
+# guard, a single /api/analyze burst can produce 4 concurrent Groq calls,
+# and under load that would exceed Groq's per-process quota.
+# Configurable via GROQ_MAX_CONCURRENT (default 8 — leaves headroom for
+# roughly two concurrent analyses).
+# ---------------------------------------------------------------------------
+_GROQ_MAX_CONCURRENT = int(os.getenv("GROQ_MAX_CONCURRENT", "8"))
+_groq_semaphore = asyncio.Semaphore(_GROQ_MAX_CONCURRENT)
+
 
 def _clean_json_text(text: str) -> str:
     """Extract raw JSON text if response contains preamble or markdown code blocks."""
@@ -43,7 +55,7 @@ class AdvancedMultiAgentSystem:
 
     def __init__(
         self,
-        model: str = "llama-3.3-70b-versatile",
+        model: str = "openai/gpt-oss-120b",
         temperature: float = 0.7,
         agent_config: Dict[str, Any] = None,
         rl_agent=None,
@@ -93,15 +105,16 @@ class AdvancedMultiAgentSystem:
 
     async def _acall_llm(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
         """Async variant of _call_llm — used for parallel agent execution."""
-        response = await self.async_client.chat.completions.create(
-            model=self.model_name,
-            temperature=self.temperature,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-        )
+        async with _groq_semaphore:
+            response = await self.async_client.chat.completions.create(
+                model=self.model_name,
+                temperature=self.temperature,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+            )
         content = response.choices[0].message.content or "{}"
         cleaned = _clean_json_text(content)
         return json.loads(cleaned)

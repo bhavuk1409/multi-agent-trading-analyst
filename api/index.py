@@ -37,6 +37,30 @@ SUPPORTED_TICKERS = ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA"]
 # a few days of slack for holidays.
 HISTORY_DAYS = 400
 
+# ---------------------------------------------------------------------------
+# Per-IP rate limiter (sliding window, in-process).
+# Mirrors the gate in api_server.py. On Vercel this resets on cold-start and
+# is per-instance — acceptable for app-level abuse; Vercel's edge already
+# handles DDoS-layer protection.
+# ---------------------------------------------------------------------------
+RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "30"))
+_rate_window: dict[str, list[float]] = {}
+
+
+def _check_rate_limit(ip: str) -> tuple[bool, int]:
+    """Return (allowed, retry_after_seconds). Sliding 60-second window."""
+    import time as _time
+    now = _time.time()
+    window = _rate_window.setdefault(ip, [])
+    cutoff = now - 60.0
+    while window and window[0] < cutoff:
+        window.pop(0)
+    if len(window) >= RATE_LIMIT_PER_MIN:
+        retry = max(1, int(60 - (now - window[0])) + 1)
+        return False, retry
+    window.append(now)
+    return True, 0
+
 # RL inference agent — loaded once at module load, shared across warm invocations.
 # Uses pure-numpy forward pass; adds 0 MB to the Vercel bundle (numpy is already
 # a prod dependency). Falls back gracefully if weights file is absent.
@@ -64,7 +88,7 @@ def get_agent_system():
     global _agent_system
     if _agent_system is None:
         try:
-            model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+            model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
             _agent_system = AdvancedMultiAgentSystem(
                 model=model,
                 temperature=0.7,
@@ -99,16 +123,37 @@ class handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _json_error(self, status: int, message: str):
+    def _json_error(self, status: int, message: str, retry_after: int | None = None):
         body = json.dumps({"error": message}).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        if retry_after is not None:
+            self.send_header("Retry-After", str(retry_after))
         self._send_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
+    def _client_ip(self) -> str:
+        fwd = self.headers.get("X-Forwarded-For")
+        if fwd:
+            return fwd.split(",")[0].strip()
+        return self.client_address[0]
+
+    def _rate_limit_or_continue(self, path: str) -> bool:
+        # Exempt endpoints that must always succeed or are long-lived streams.
+        if path in ("/api/health", "/health", "/api/stream/watchlist", "/stream/watchlist"):
+            return True
+        ok, retry = _check_rate_limit(self._client_ip())
+        if not ok:
+            logger.warning(f"Rate limit exceeded for {self._client_ip()} on {path}")
+            self._json_error(429, f"Rate limit exceeded. Try again in {retry}s.", retry_after=retry)
+            return False
+        return True
+
     def do_GET(self):
         path = self.path.split("?")[0]
+        if not self._rate_limit_or_continue(path):
+            return
 
         if path in ("/api/health", "/health"):
             self._json_ok({
@@ -175,6 +220,8 @@ class handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if not self._rate_limit_or_continue(path):
+            return
 
         if path in ("/api/analyze", "/analyze"):
             try:

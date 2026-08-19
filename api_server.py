@@ -57,6 +57,32 @@ SUPPORTED_TICKERS = ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA"]
 # a few days of slack for holidays.
 HISTORY_DAYS = 400
 
+# ---------------------------------------------------------------------------
+# Per-IP rate limiter (sliding window, in-process).
+# Hand-rolled because the server is stdlib http.server — slowapi/limits assume
+# ASGI. On Vercel serverless this resets on cold-start and is per-instance,
+# which is fine for catching application-level abuse per warm invocation.
+# ---------------------------------------------------------------------------
+RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "30"))
+_rate_window: dict[str, list[float]] = {}
+
+
+def _check_rate_limit(ip: str) -> tuple[bool, int]:
+    """Return (allowed, retry_after_seconds). Sliding 60-second window."""
+    import time as _time
+    now = _time.time()
+    window = _rate_window.setdefault(ip, [])
+    cutoff = now - 60.0
+    # Drop expired entries.
+    while window and window[0] < cutoff:
+        window.pop(0)
+    if len(window) >= RATE_LIMIT_PER_MIN:
+        # Retry-After = ceil(time until oldest entry expires).
+        retry = max(1, int(60 - (now - window[0])) + 1)
+        return False, retry
+    window.append(now)
+    return True, 0
+
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
     try:
@@ -64,7 +90,7 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
             return yaml.safe_load(f)
     except Exception:
         return {
-            "llm":    {"model": "llama-3.3-70b-versatile", "temperature": 0.7},
+            "llm":    {"model": "openai/gpt-oss-120b", "temperature": 0.7},
             "agents": {},
         }
 
@@ -83,7 +109,7 @@ except Exception as _rl_exc:
 
 try:
     _agent_system = AdvancedMultiAgentSystem(
-        model=_config.get("llm", {}).get("model", "llama-3.3-70b-versatile"),
+        model=_config.get("llm", {}).get("model", "openai/gpt-oss-120b"),
         temperature=_config.get("llm", {}).get("temperature", 0.7),
         agent_config=_config.get("agents", {}),
         rl_agent=_rl_agent,
@@ -127,10 +153,12 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
-    def _json_error(self, status: int, message: str):
+    def _json_error(self, status: int, message: str, retry_after: int | None = None):
         body = json.dumps({"error": message}).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        if retry_after is not None:
+            self.send_header("Retry-After", str(retry_after))
         self._send_cors_headers()
         self.end_headers()
         try:
@@ -138,9 +166,31 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
+    def _client_ip(self) -> str:
+        # Honour X-Forwarded-For when behind a reverse proxy (Vercel sets one),
+        # fall back to the direct peer otherwise.
+        fwd = self.headers.get("X-Forwarded-For")
+        if fwd:
+            return fwd.split(",")[0].strip()
+        return self.client_address[0]
+
+    def _rate_limit_or_continue(self, path: str) -> bool:
+        """Return False (and send 429) if the request should be blocked."""
+        # Exempt endpoints that must always succeed or are long-lived streams.
+        if path in ("/api/health", "/api/stream/watchlist"):
+            return True
+        ok, retry = _check_rate_limit(self._client_ip())
+        if not ok:
+            logger.warning(f"Rate limit exceeded for {self._client_ip()} on {path}")
+            self._json_error(429, f"Rate limit exceeded. Try again in {retry}s.", retry_after=retry)
+            return False
+        return True
+
     # GET --------------------------------------------------------------------
 
     def do_GET(self):
+        if not self._rate_limit_or_continue(self.path):
+            return
         if self.path == "/api/health":
             self._handle_health()
         elif self.path == "/api/watchlist":
@@ -219,6 +269,8 @@ class APIRequestHandler(http.server.BaseHTTPRequestHandler):
     # POST -------------------------------------------------------------------
 
     def do_POST(self):
+        if not self._rate_limit_or_continue(self.path):
+            return
         if self.path == "/api/analyze":
             self._handle_analyze()
         else:
