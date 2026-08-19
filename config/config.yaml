@@ -15,11 +15,11 @@ data:
 # ---------------------------------------------------------------------------
 llm:
   # Available models on Groq (as of mid-2026):
-  #   llama-3.3-70b-versatile   ← recommended (default)
+  #   openai/gpt-oss-120b    ← recommended (default)
   #   llama-3.1-70b-versatile
   #   llama3-70b-8192
   #   gemma2-9b-it
-  model: "llama-3.3-70b-versatile"
+  model: "openai/gpt-oss-120b"
   temperature: 0.7
   max_tokens: 2000
 

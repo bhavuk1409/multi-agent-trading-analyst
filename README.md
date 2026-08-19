@@ -78,10 +78,10 @@ flowchart TB
 
 | Agent | Type | Weight | Notes |
 |---|---|---|---|
-| Technical Analyst | LLM (LLaMA 3.3 70B) | **0.20** | RSI, MACD, Bollinger, SMA crossovers |
-| Fundamental Analyst | LLM (LLaMA 3.3 70B) | **0.225** | P/E, EPS, sector, analyst targets |
-| Sentiment Analyst | LLM (LLaMA 3.3 70B) | **0.225** | News, social signals |
-| Risk Manager | LLM (LLaMA 3.3 70B) | **0.20** | HV-14, ATR, drawdown, position sizing |
+| Technical Analyst | LLM (GPT-OSS 120B) | **0.20** | RSI, MACD, Bollinger, SMA crossovers |
+| Fundamental Analyst | LLM (GPT-OSS 120B) | **0.225** | P/E, EPS, sector, analyst targets |
+| Sentiment Analyst | LLM (GPT-OSS 120B) | **0.225** | News, social signals |
+| Risk Manager | LLM (GPT-OSS 120B) | **0.20** | HV-14, ATR, drawdown, position sizing |
 | **Quant Model** | **PPO RL (numpy)** | **0.15** | Defensive/risk-hedging |
 
 > **Risk Profile:** Backtesting showed the RL model is stronger at avoiding sustained downtrends (avoiding -31% TSLA and -26% MSFT drawdowns in out-of-sample testing), but trailed slightly during major bull rallies. Thus, it acts as a **defensive 0.15 weighted hedge** rather than a primary momentum signal.
@@ -96,7 +96,7 @@ flowchart TB
 | Fundamentals | Yahoo Finance (`.info`) | No — free |
 | News (primary) | Exa Neural Search | Optional |
 | News (fallback) | Yahoo Finance headlines | No — free |
-| LLM reasoning | Groq (LLaMA 3.3 70B) | Yes — required |
+| LLM reasoning | Groq (GPT-OSS 120B) | Yes — required |
 | RL training data | Yahoo Finance OHLCV | No — free |
 
 *(System utilises RSI-14, MACD, SMA-20/50, Bollinger Bands, HV-14, ATR-14, and max drawdowns for technical signals).*

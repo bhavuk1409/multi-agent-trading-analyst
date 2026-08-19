@@ -60,7 +60,7 @@ def system():
     """A single AdvancedMultiAgentSystem for the whole module — initialising
     the OpenAI clients is non-trivial and we want to amortise it across tests."""
     return AdvancedMultiAgentSystem(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         temperature=0.0,
     )
 
@@ -120,7 +120,7 @@ def test_weights_visible_in_coordinator_prompt(system):
     We verify by enabling only one agent (with weight 1.0) and asserting
     that its section dominates the coordinator's user message."""
     one_agent = AdvancedMultiAgentSystem(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         temperature=0.0,
         agent_config={
             "technical_analyst":   {"enabled": True,  "weight": 1.0},
@@ -161,7 +161,7 @@ def test_weights_normalised_to_sum_to_one():
     """If a user supplies weights that don't sum to 1.0, the formatter
     renormalises so the four annotations in the prompt sum to 1.0."""
     s = AdvancedMultiAgentSystem(
-        model="llama-3.3-70b-versatile",
+        model="openai/gpt-oss-120b",
         temperature=0.0,
         agent_config={
             "technical_analyst":   {"enabled": True, "weight": 2.0},   # sum = 5.0
